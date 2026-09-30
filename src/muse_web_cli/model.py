@@ -117,16 +117,24 @@ def latest_assistant(messages: list[Message]) -> Message | None:
 
 
 def is_settled(message: Message) -> bool:
-    """A new assistant bubble is done only when both flags are false and actions are up.
+    """A reply is done when actions are up and it is not still streaming.
 
+    Both flags false with the copy action is the in-flight completion signal.
+    After completion Muse removes the attributes, so both missing plus the copy
+    action is the same finished state. One flag alone is not done.
     A presentation card is waiting on the user; it is done for reading and is never clicked.
-    Missing flags are not done. One flag alone is not done.
     """
     if message.typing or message.role != "assistant":
         return False
     if message.presentation:
         return True
-    return message.busy is False and message.streaming is False and message.has_actions is True
+    if not message.has_actions:
+        return False
+    if message.busy is True or message.streaming is True:
+        return False
+    both_false = message.busy is False and message.streaming is False
+    both_cleared = message.busy is None and message.streaming is None
+    return both_false or both_cleared
 
 
 def user_count(messages: list[Message], text: str) -> int:

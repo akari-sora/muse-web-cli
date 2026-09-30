@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 
 from dataclasses import dataclass
@@ -256,9 +257,13 @@ def collect_selftest(driver) -> dict:
 
 
 def message_from_raw(raw: dict) -> Message:
+    role = str(raw.get("role") or "")
+    text = str(raw.get("text") or "")
+    if role == "user":
+        text = re.sub(r"^(?:用戶訊息[：:]|你[：:]|You:)\s*", "", text, count=1)
     return Message(
-        role=str(raw.get("role") or ""),
-        text=str(raw.get("text") or ""),
+        role=role,
+        text=text,
         presentation=bool(raw.get("presentation")),
         busy=raw.get("busy"),
         streaming=raw.get("streaming"),

@@ -1,5 +1,6 @@
 import json
 
+from muse_web_cli.flow import message_from_raw
 from muse_web_cli.model import (
     Message,
     assess,
@@ -95,6 +96,8 @@ def test_completion_needs_both_flags():
     assert not is_settled(Message("assistant", "ok", busy=False, streaming=False, has_actions=False))
     assert is_settled(Message("assistant", "card", presentation=True))
     assert not is_settled(Message("assistant", "type", typing=True, busy=False, streaming=False, has_actions=True))
+    assert is_settled(Message("assistant", "ok", busy=None, streaming=None, has_actions=True))
+    assert not is_settled(Message("assistant", "ok", busy=None, streaming=None, has_actions=False))
 
 
 def test_messages_shape_and_order():
@@ -120,6 +123,15 @@ def test_reply_uses_the_new_turn_only():
     assert reply_text(after, "hi") == ("new", False)
     streaming = before + [Message("user", "hi"), Message("assistant", "new", busy=False, streaming=True, has_actions=False)]
     assert not reply_ready(streaming, "hi")
+
+
+def test_offscreen_user_label_is_stripped():
+    item = message_from_raw({"role": "user", "text": "你：trinity 測試"})
+    labeled = message_from_raw({"role": "user", "text": "用戶訊息：trinity 測試"})
+    assert item.text == "trinity 測試"
+    assert labeled.text == "trinity 測試"
+    assert user_count([item, labeled], "trinity 測試") == 2
+    assert message_from_raw({"role": "assistant", "text": "你：留下"}).text == "你：留下"
 
 
 def test_public_message_hides_internal_flags():

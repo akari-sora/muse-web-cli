@@ -74,6 +74,7 @@ async () => {{
       clone.querySelectorAll("button, svg").forEach((node) => node.remove());
       text = (clone.textContent || "").replace(/\\s+/g, " ").trim();
     }}
+    if (role === "user") text = text.replace(/^(?:用戶訊息[：:]|你[：:]|You:)\\s*/, "");
     const busyAttr = item.getAttribute("aria-busy") || (body && body.getAttribute("aria-busy"));
     messages.push({{
       role,
@@ -124,6 +125,7 @@ async (payload) => {{
     return null;
   }};
   const collect = () => {{
+    if (log) log.scrollTop = log.scrollHeight;
     const messages = [];
     for (const item of document.querySelectorAll(sel.messageItem)) {{
       if (item.getAttribute("data-testid") === "hatch-chat-typing-indicator") continue;
@@ -140,6 +142,7 @@ async (payload) => {{
         clone.querySelectorAll("button, svg").forEach((node) => node.remove());
         text = (clone.textContent || "").replace(/\\s+/g, " ").trim();
       }}
+      if (role === "user") text = text.replace(/^(?:用戶訊息[：:]|你[：:]|You:)\\s*/, "");
       const busyAttr = item.getAttribute("aria-busy") || (body && body.getAttribute("aria-busy"));
       messages.push({{
         role,
@@ -165,7 +168,11 @@ async (payload) => {{
     if (tail.some((item) => item.busy === true || item.streaming === true)) return false;
     const last = tail[tail.length - 1];
     if (last.presentation) return true;
-    return last.busy === false && last.streaming === false && last.hasActions === true;
+    if (last.hasActions !== true) return false;
+    if (last.busy === true || last.streaming === true) return false;
+    const bothFalse = last.busy === false && last.streaming === false;
+    const bothCleared = last.busy === null && last.streaming === null;
+    return bothFalse || bothCleared;
   }};
   const log = document.querySelector(sel.log);
   if (!log) return {{timedOut: false, phase: "missing", messages: []}};

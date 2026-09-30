@@ -17,15 +17,19 @@ from muse_web_cli.probes import MEMORY_JS, OBSERVER_JS, PANEL_JS, PANEL_STATE_JS
 from muse_web_cli.selectors import (
     AVATAR_BUTTON,
     COMPOSER,
+    EDITOR,
     EDITOR_CLOSE,
     LOG,
     MEMORY_FILE,
     MUSE_URL,
+    SEND_BUTTON,
     TAB_ACTIVITY,
     TAB_IDENTITY,
     TAB_PENDING,
     TAB_UPCOMING,
 )
+
+_TAB_CLICKS = frozenset({TAB_PENDING, TAB_UPCOMING, TAB_ACTIVITY, TAB_IDENTITY})
 
 _CLICK_NAME = {
     COMPOSER: "composer",
@@ -82,6 +86,15 @@ class CdpPage:
             selectors=present,
         )
 
+    def _wait_until(self, predicate, missing: str, timeout: float = 3.0) -> None:
+        deadline = time.monotonic() + timeout
+        while True:
+            if predicate():
+                return
+            if time.monotonic() >= deadline:
+                raise PageChanged(missing)
+            time.sleep(0.1)
+
     def click(self, selector: str) -> None:
         guard_click(selector)
         locator = self.page.locator(selector)
@@ -92,17 +105,50 @@ class CdpPage:
         if count == 0:
             raise PageChanged(_CLICK_NAME.get(selector, "control"))
         locator.first.click(timeout=10000)
-        if selector != COMPOSER:
+        if selector in _TAB_CLICKS:
+            self._wait_until(
+                lambda: tab_selector(self._panel_state().get("label")) == selector,
+                "tab",
+            )
+            # aria-pressed flips before the tab body swaps.
+            time.sleep(0.45)
+        elif selector == MEMORY_FILE:
+            self._wait_until(lambda: self.page.locator(EDITOR).count() > 0, "editor")
+        elif selector == EDITOR_CLOSE:
+            self._wait_until(lambda: self.page.locator(EDITOR).count() == 0, "editor_close")
+        elif selector == AVATAR_BUTTON:
+            self._wait_until(lambda: bool(self._panel_state().get("open")), "panel")
+        elif selector != COMPOSER:
             time.sleep(0.15)
+
+    def _draft_matches(self, text: str) -> bool:
+        value = self.page.locator(COMPOSER).first.input_value()
+        return " ".join(value.split()) == " ".join(text.split())
 
     def insert_text(self, text: str) -> None:
         self.click(COMPOSER)
-        draft = self.page.locator(COMPOSER).first.input_value()
-        if draft.strip():
+        if self.page.locator(COMPOSER).first.input_value().strip():
             raise PageChanged("composer_not_empty")
         self.page.keyboard.insert_text(text)
+        try:
+            # Enter before React commits the draft sends nothing and clears it.
+            self._wait_until(
+                lambda: self._draft_matches(text) and self.page.locator(SEND_BUTTON).count() > 0,
+                "composer",
+            )
+        except PageChanged:
+            self._clear_own_draft(text)
+            raise
+
+    def _clear_own_draft(self, text: str) -> None:
+        if not self._draft_matches(text):
+            return
+        self.page.locator(COMPOSER).first.focus()
+        self.page.keyboard.press("Meta+A")
+        self.page.keyboard.press("Backspace")
 
     def press_enter(self) -> None:
+        self.page.locator(COMPOSER).first.focus()
         self.page.keyboard.press("Enter")
 
     def wait_outcome(self, *, text: str, before_count: int, wait: bool, timeout: float) -> WaitResult:
