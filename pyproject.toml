@@ -7,6 +7,12 @@ license = { text = "MIT" }
 requires-python = ">=3.11"
 dependencies = ["playwright>=1.49,<2"]
 
+[project.urls]
+Homepage = "https://gitlab.com/aa22396584/muse-web-cli"
+Repository = "https://gitlab.com/aa22396584/muse-web-cli"
+Changelog = "https://gitlab.com/aa22396584/muse-web-cli/-/blob/main/CHANGELOG.md"
+Issues = "https://gitlab.com/aa22396584/muse-web-cli/-/issues"
+
 [project.scripts]
 muse-web-cli = "muse_web_cli.cli:main"
 

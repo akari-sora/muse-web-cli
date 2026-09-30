@@ -10,6 +10,7 @@ import os
 import sys
 from pathlib import Path
 
+from muse_web_cli import __version__
 from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.backends.browser import BrowserBackend
 from muse_web_cli.chrome import (
@@ -51,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
+    parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = parser.add_subparsers(dest="command")
     sub.add_parser("status", help="browser, session, pending count, and whether the latest reply is a card")
     messages = sub.add_parser("messages", help="recent messages, oldest to newest")

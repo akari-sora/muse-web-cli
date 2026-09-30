@@ -1,5 +1,7 @@
 # muse-web-cli
 
+[![pipeline](https://gitlab.com/aa22396584/muse-web-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/commits/main)
+
 [中文](#中文) · [English](#english)
 
 ## 中文
@@ -14,13 +16,28 @@
 
 需要 Python 3.11 以上，以及已安裝的 Google Chrome。Playwright 只拿來接上你自己的 Chrome，不必再下載瀏覽器。
 
+v0.1.0：
+
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --editable /Users/iml1s/Documents/mine/muse-web-cli
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
 ```
 
-之後如果這個 repo 有 Git 遠端，可以改成 `uv tool install git+<那個位址>`。目前還沒有遠端，也還沒有 CI。
+升級時把標籤改成要裝的版本，再裝一次：
 
-執行 `muse-web-cli --help`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+```bash
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+```
+
+移除：
+
+```bash
+uv tool uninstall muse-web-cli
+pipx uninstall muse-web-cli
+```
+
+在這個 repo 裡開發可以用 `uv tool install --editable .`。執行 `muse-web-cli --version` 或 `muse-web-cli --help`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 ### 登入與背景執行
 
@@ -73,7 +90,7 @@ muse-web-cli selftest
 ```
 
 - `messages` 由舊到新。離畫面外的訊息是虛擬化的，讀的是目前掛上的視窗（會先捲到最新）。
-- `send` 用 `insertText` 加 Enter，只送一次。`--wait` 等到新的助理訊息完成：`aria-busy=false` 且 `data-hatch-markdown-streaming=false`，並且複製回覆的按鈕出現。逾時不會重送。
+- `send` 用 `insertText` 加 Enter，只送一次。`--wait` 等到新的助理訊息完成：複製回覆的按鈕出現，而且 `aria-busy` 與 `data-hatch-markdown-streaming` 都是 false，或這兩個屬性在完成後已被拿掉。逾時不會重送。
 - `pending` 只讀，不點核可或拒絕。
 - `memory` 只讀 Lexical 編輯器的 `innerText`，不會聚焦、不會打字。
 - `selftest` 只檢查選擇器在不在，不點任何東西。
@@ -169,13 +186,28 @@ It works without a visible window. Log in once headed, then `start --headless` o
 
 Python 3.11+, and Google Chrome already installed. Playwright attaches to that Chrome. Do not download a Playwright browser.
 
+v0.1.0:
+
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --editable /path/to/muse-web-cli
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
 ```
 
-A Git remote and CI are not set up yet. When a remote exists, `uv tool install git+<url>` is the install path.
+Upgrade by reinstalling the tag you want:
 
-Run `muse-web-cli --help`. If the command is missing, add `~/.local/bin` to PATH.
+```bash
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+```
+
+Uninstall:
+
+```bash
+uv tool uninstall muse-web-cli
+pipx uninstall muse-web-cli
+```
+
+For development in this checkout, `uv tool install --editable .` works. Run `muse-web-cli --version` or `muse-web-cli --help`. If the command is missing, add `~/.local/bin` to PATH.
 
 ### Login and background use
 
@@ -228,7 +260,7 @@ muse-web-cli selftest
 ```
 
 - `messages` is oldest to newest. Off-screen rows are virtualized; the command scrolls to the latest mounted window.
-- `send` uses insertText and Enter, once. `--wait` finishes only when `aria-busy` is false and `data-hatch-markdown-streaming` is false and the copy-reply action is present. A timeout never resends.
+- `send` uses insertText and Enter, once. `--wait` finishes when the copy-reply action is present and both `aria-busy` and `data-hatch-markdown-streaming` are false, or those attributes have already been removed. A timeout never resends.
 - `pending` is read-only. It does not approve or reject.
 - `memory` reads the Lexical editor's `innerText`. It does not focus or type.
 - `selftest` checks that selectors exist. It clicks nothing.

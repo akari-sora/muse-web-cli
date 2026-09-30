@@ -124,3 +124,8 @@ def test_cli_help_and_limit(tmp_path, capsys):
     assert main(["--help"], home=tmp_path) == 0
     assert main(["messages", "--limit", "0"], home=tmp_path) == 2
     assert "muse-web-cli" in capsys.readouterr().out
+
+
+def test_cli_version(tmp_path, capsys):
+    assert main(["--version"], home=tmp_path) == 0
+    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.0"
