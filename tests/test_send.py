@@ -1,0 +1,164 @@
+from muse_web_cli.backends.browser import BrowserBackend
+from muse_web_cli.flow import WaitResult, perform_send
+from muse_web_cli.model import Message
+from muse_web_cli.nav import ALLOWED_CLICKS, guard_click, read_memory_flow, read_with_tab
+from muse_web_cli.selectors import (
+    AVATAR_BUTTON,
+    EDITOR_CLOSE,
+    MEMORY_FILE,
+    SEND_BUTTON,
+    SWITCHER,
+    TAB_ACTIVITY,
+    TAB_IDENTITY,
+    TAB_PENDING,
+)
+from tests.fakes import ok_snapshot
+
+import pytest
+
+
+class FakeDriver:
+    def __init__(self, outcome=None, messages=None):
+        self.calls = []
+        self.inserts = 0
+        self.enters = 0
+        self.outcome = outcome or WaitResult(True, "user", [])
+        self.messages = messages or []
+
+    def snapshot(self):
+        self.calls.append("snapshot")
+        return ok_snapshot(self.messages)
+
+    def read_groups(self, target):
+        self.calls.append("groups")
+        return [{"title": "待審項目", "items": []}]
+
+    def insert_text(self, text):
+        self.inserts += 1
+        if self.inserts > 1:
+            raise AssertionError("resent")
+        self.calls.append("insert")
+
+    def press_enter(self):
+        self.enters += 1
+        if self.enters > 1:
+            raise AssertionError("resent")
+        self.calls.append("enter")
+
+    def wait_outcome(self, **kwargs):
+        self.calls.append("wait")
+        return self.outcome
+
+
+def test_send_timeout_never_resends():
+    driver = FakeDriver(WaitResult(True, "reply", [Message("user", "hi")]))
+    payload = perform_send(driver, "hi", wait=True, timeout=0.01)
+    assert driver.inserts == 1
+    assert driver.enters == 1
+    assert payload["state"] == "timeout"
+    assert payload["sent"] is True
+    assert payload["attempted"] is True
+    assert payload["hint"] == "nothing was sent again"
+    assert driver.calls.count("insert") == 1
+
+
+def test_nonempty_composer_does_not_send():
+    class Dirty(FakeDriver):
+        def insert_text(self, text):
+            from muse_web_cli.errors import PageChanged
+
+            raise PageChanged("composer_not_empty")
+
+    payload = perform_send(Dirty(), "hi", wait=True, timeout=1)
+    assert payload["state"] == "ui_changed"
+    assert payload["attempted"] is False
+    assert payload["sent"] is False
+    assert "nothing was sent" in payload["error"]
+
+
+def test_send_without_user_row_does_not_retry():
+    driver = FakeDriver(WaitResult(True, "user", []))
+    payload = perform_send(driver, "hi", wait=False, timeout=0.01)
+    assert driver.inserts == 1
+    assert payload["sent"] is False
+    assert payload["state"] == "timeout"
+
+
+def test_send_wait_prints_settled_reply():
+    outcome = WaitResult(
+        False,
+        "reply",
+        [
+            Message("assistant", "old", busy=False, streaming=False, has_actions=True),
+            Message("user", "ping"),
+            Message("assistant", "pong", busy=False, streaming=False, has_actions=True),
+        ],
+    )
+    payload = perform_send(FakeDriver(outcome), "ping", wait=True, timeout=5)
+    assert payload["state"] == "ok"
+    assert payload["reply"] == "pong"
+    assert payload["presentation"] is False
+    assert payload["sent"] is True
+
+
+def test_headed_and_headless_share_status_and_send():
+    sequences = []
+    flags = []
+    for headless in (True, False):
+        driver = FakeDriver(WaitResult(True, "user", []))
+        backend = BrowserBackend(driver, headless=headless)
+        status = backend.status()
+        backend.send("hi", wait=False, timeout=1)
+        sequences.append(list(driver.calls))
+        flags.append(status["headless"])
+        assert status["state"] == "ok"
+        assert status["pending"] == 0
+    assert sequences[0] == sequences[1]
+    assert flags == [True, False]
+    assert sequences[0] == ["snapshot", "groups", "snapshot", "insert", "enter", "wait"]
+
+
+def test_tab_restores_original_and_avatar_opens_collapsed_panel():
+    clicks = []
+
+    def click(selector):
+        guard_click(selector)
+        clicks.append(selector)
+
+    def read():
+        raise RuntimeError("boom")
+
+    with pytest.raises(RuntimeError):
+        read_with_tab(
+            panel_open=lambda: False,
+            current_tab=lambda: TAB_ACTIVITY,
+            click=click,
+            read=read,
+            target=TAB_PENDING,
+        )
+    assert clicks == [AVATAR_BUTTON, TAB_PENDING, TAB_ACTIVITY]
+
+
+def test_memory_closes_editor_without_typing():
+    clicks = []
+
+    def click(selector):
+        guard_click(selector)
+        clicks.append(selector)
+
+    text = read_memory_flow(
+        panel_open=lambda: True,
+        current_tab=lambda: TAB_ACTIVITY,
+        click=click,
+        read_text=lambda: "Facts\nhello",
+    )
+    assert text == "Facts\nhello"
+    assert clicks == [TAB_IDENTITY, MEMORY_FILE, EDITOR_CLOSE, TAB_ACTIVITY]
+    assert SEND_BUTTON not in ALLOWED_CLICKS
+    assert SWITCHER not in ALLOWED_CLICKS
+    with pytest.raises(Exception):
+        guard_click('[data-testid="hatch-dock-more"]')
+    with pytest.raises(Exception):
+        guard_click('[data-pel-click="connector_mail"]')
+    with pytest.raises(Exception):
+        guard_click('[data-testid="hatch-file-editor-maximize"]')
