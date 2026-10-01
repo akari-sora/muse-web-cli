@@ -164,11 +164,11 @@ MUSE_URL = "https://muse.ai/"
 LOGIN_HINT = "muse-web-cli login"
 API_UNAVAILABLE = (
     "找不到 ~/.trinity-cli/muse-credential。"
-    "請建立這個檔案（mode 600），填上 base_url、auth.type、auth.token、vm_id。"
+    "請執行 muse-web-cli credential（mode 600）。需要 base_url、auth.type、auth.token、vm_id。"
 )
 API_HINT = (
-    "改用 --backend browser，或把憑證寫進 ~/.trinity-cli/muse-credential。"
-    "欄位是 base_url、auth.type、auth.token、vm_id。這個工具不會讀取 cookie 或 token。"
+    "執行 muse-web-cli credential，或 trinity-cli login muse。"
+    "沒有登入會先開啟登入視窗。這個工具不會印出 token。"
 )
 CREDENTIAL_HINT = "chmod 600 ~/.trinity-cli/muse-credential"
 CREDENTIAL_HINT_WINDOWS = "put ~/.trinity-cli/muse-credential in your home directory"

@@ -45,6 +45,12 @@ def _error_lines(payload: dict) -> list[str]:
 
 
 def human(payload: dict) -> str:
+    if payload.get("action") == "credential":
+        names = [name for name, present in (payload.get("fields") or {}).items() if present]
+        line = f"wrote={str(bool(payload.get('wrote'))).lower()} fields={','.join(names) or '-'}"
+        if payload.get("state") != "ok":
+            return line + "\n" + "\n".join(_error_lines(payload))
+        return line
     if "action" in payload and "tracked" in payload:
         lines = [
             f"action={payload.get('action')} port={payload.get('port')} "

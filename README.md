@@ -178,9 +178,15 @@ muse-web-cli --json pending
 JSON 形狀和結束碼不因後端而改變。呼叫端不要自己分支。預設是 `browser`。選擇方式：`--backend`、`MUSE_WEB_BACKEND`、或設定檔的 `backend`。優先順序與上面相同。
 
 - `browser`：有視窗或無頭，透過 CDP 操作頁面。預設是這個。
-- `api`：憑證有 `vm_id` 時，走已經開啟的 Muse gateway（狀態、訊息、送訊、核可、排程、動態、記憶、聊天室的列表與建改刪切換）。沒有 `vm_id` 時，仍可用 `endpoints` 指到你自己的 REST。工具不會從瀏覽器取出 cookie 或 token，也不會把 token 寫進檔案。
+- `api`：憑證有 `vm_id` 時，走已經開啟的 Muse gateway（狀態、訊息、送訊、核可、排程、動態、記憶、聊天室的列表與建改刪切換）。沒有 `vm_id` 時，仍可用 `endpoints` 指到你自己的 REST。
 
-憑證檔由你自己建立：`~/.trinity-cli/muse-credential`。macOS 與 Linux 權限必須正好是 `600`。Windows 不檢查 Unix 權限，但檔案必須在使用者主目錄裡。範例（token 是假的）：
+`credential` 從已經登入的 Muse 頁面把 gateway 憑證寫進 `~/.trinity-cli/muse-credential`。沒有登入時，它會先走 `login`（有視窗），登入完成後再寫。macOS 與 Linux 檔案權限是 `600`，目錄是 `700`。它不會把 token 印出來。還沒登入、或視窗還在等你核准時，結束碼是 2，不會假裝已經寫入。
+
+```bash
+muse-web-cli credential
+```
+
+範例（token 是假的）：
 
 ```json
 {
@@ -217,7 +223,7 @@ JSON 形狀和結束碼不因後端而改變。呼叫端不要自己分支。預
 
 ### 安全
 
-記憶體只讀。不會點設定、連接器、邀請、附加檔案、新的副聊天室、記憶工具列、核可或拒絕。不會讀、複製、儲存或印出 cookie、token、CSRF。不開 CDP 的 Network / Storage。不在瀏覽器外面重放 Muse 的請求。
+記憶體只讀。不會點設定、連接器、邀請、附加檔案、新的副聊天室、記憶工具列、核可或拒絕。不讀 cookie，不開 CDP 的 Network / Storage，也不印出 token。`credential` 把 gateway token 寫進 `~/.trinity-cli/muse-credential`。`--backend api` 用這份憑證呼叫 gateway。
 
 ### 排解
 
@@ -411,9 +417,15 @@ Global flags may appear before or after the command:
 JSON shapes and exit codes do not depend on the backend. Callers should not branch. The default is `browser`. Select it with `--backend`, `MUSE_WEB_BACKEND`, or the config key `backend`. Precedence is the same as above.
 
 - `browser`: headed or headless, over CDP. This is the default.
-- `api`: with `vm_id`, this talks to the open Muse gateway (status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch). Without `vm_id`, `endpoints` still selects a REST path you configure. The tool never extracts cookies or tokens from the browser, and it never writes a token into the file.
+- `api`: with `vm_id`, this talks to the open Muse gateway (status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch). Without `vm_id`, `endpoints` still selects a REST path you configure.
 
-You create `~/.trinity-cli/muse-credential` yourself. On macOS and Linux the mode must be exactly `600`. On Windows the Unix mode is not checked, but the file must be under your home directory. Example (the token is fake):
+`credential` writes the gateway credential from the logged-in Muse page into `~/.trinity-cli/muse-credential`. If the session is missing, it runs `login` (a visible window) and writes after that login finishes. On macOS and Linux the file mode is `600` and the directory mode is `700`. It does not print the token. If you still have to approve the window, the exit code is 2 and nothing is written.
+
+```bash
+muse-web-cli credential
+```
+
+Example (the token is fake):
 
 ```json
 {
@@ -439,7 +451,7 @@ You create `~/.trinity-cli/muse-credential` yourself. On macOS and Linux the mod
 
 ### Safety
 
-Memory is read-only. The tool never clicks settings, connectors, invites, attach, a new side chat, the memory toolbar, or approve/reject. It does not read, copy, store, or print cookies, tokens, or CSRF values. It does not enable the CDP Network or Storage domains. It does not replay Muse requests outside the browser.
+Memory is read-only. The tool never clicks settings, connectors, invites, attach, a new side chat, the memory toolbar, or approve/reject. It does not read cookies, enable the CDP Network or Storage domains, or print a token. `credential` writes the gateway token into `~/.trinity-cli/muse-credential`. `--backend api` calls the gateway with that file.
 
 ### Troubleshooting
 

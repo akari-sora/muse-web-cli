@@ -13,6 +13,7 @@ from pathlib import Path
 from muse_web_cli import __version__
 from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.backends.browser import BrowserBackend
+from muse_web_cli.capture import CAPTURE_JS, run_credential
 from muse_web_cli.chrome import (
     alive,
     discover_chrome,
@@ -38,7 +39,7 @@ LIMIT_MAX = 100
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="muse-web-cli",
-        description="Drive your own logged-in Muse web app. This does not read cookies or tokens.",
+        description="Drive your own logged-in Muse web app. This does not read cookies or print tokens.",
         epilog=(
             "examples:\n"
             "  muse-web-cli login\n"
@@ -47,6 +48,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  muse-web-cli --json --autostart status\n"
             "  muse-web-cli --json messages --limit 5\n"
             "  muse-web-cli send --wait --timeout 120 -- \"text\"\n"
+            "  muse-web-cli credential\n"
             "\n"
             "Global flags may appear before or after the command.\n"
             "Exit 0 ok.\n"
@@ -105,6 +107,10 @@ def build_parser() -> argparse.ArgumentParser:
     chats.add_argument("--delete", metavar="SESSION", help="delete a chat on the api backend")
     chats.add_argument("--switch", metavar="SESSION", help="switch chat on the api backend; use main for the primary chat")
     chats.add_argument("--title", help="title for --create or --rename")
+    sub.add_parser(
+        "credential",
+        help="save the gateway credential from the logged-in page; log in first when the session is missing",
+    )
     sub.add_parser("login", help="open a headed window so you can log in; never types credentials")
     start = sub.add_parser("start", help="start dedicated Chrome, or attach if that profile is already running")
     start.add_argument("--headed", action="store_true", help="show the window (default: headless)")
@@ -307,6 +313,37 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
     return _with_page(settings, mode="use", headless=True, kind=command, text=text, fn=run)
 
 
+def _connect_page(settings: Settings):
+    ready = _ensure(settings, mode="use", headless=True)
+    if ready["state"] != "ok":
+        return ready, None
+    try:
+        return ready, connect(ready["port"])
+    except BrowserDown as exc:
+        failed = dict(ready)
+        failed["state"] = "browser_down"
+        failed["error"] = exc.error
+        failed["hint"] = exc.hint or ready.get("hint")
+        return failed, None
+
+
+def _run_credential(settings: Settings) -> dict:
+    def session_state(page) -> str:
+        return assess(page.snapshot())["state"]
+
+    def capture(page):
+        raw = page._eval(CAPTURE_JS)
+        return raw if isinstance(raw, dict) else {"ok": False, "reason": "token_body"}
+
+    return run_credential(
+        settings.paths.credential,
+        connect=lambda: _connect_page(settings),
+        login=lambda: _run_lifecycle(settings, argparse.Namespace(command="login")),
+        capture=capture,
+        session_state=session_state,
+    )
+
+
 def _run_lifecycle(settings: Settings, args: argparse.Namespace) -> dict:
     if args.command == "stop":
         with file_lock(settings.paths.lock):
@@ -387,7 +424,9 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
         if args.command == "send" and args.timeout <= 0:
             print("timeout must be > 0", file=sys.stderr)
             return 2
-        if args.command in CAPABILITIES:
+        if args.command == "credential":
+            payload = _run_credential(settings)
+        elif args.command in CAPABILITIES:
             payload = _run_capability(settings, args.command, args)
         else:
             payload = _run_lifecycle(settings, args)

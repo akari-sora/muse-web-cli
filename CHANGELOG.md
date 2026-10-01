@@ -6,7 +6,8 @@
 - Show global flags, defaults, and examples in `--help`.
 - Support Linux, Windows, and macOS: Chrome discovery, process stop, profile locks, and UTF-8 console output. Linux is covered by CI, Windows by CI, and macOS by local tests plus a live read-only check.
 - `login` on Linux without a display returns `browser_down` and leaves an already-running headless Chrome in place.
-- The api backend is a generic client for a credential the user writes. With `vm_id` it calls the open Muse gateway for status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch. Exit 4 is a missing credential or an empty endpoint. The tool never extracts cookies or tokens.
+- The api backend is a generic client for a credential the user writes. With `vm_id` it calls the open Muse gateway for status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch. Exit 4 is a missing credential or an empty endpoint.
+- `credential` reads the logged-in Muse page and writes `~/.trinity-cli/muse-credential` (mode 600). A missing session runs `login` first. The token is not printed.
 - Part of trinity-cli: https://gitlab.com/aa22396584/trinity-cli
 
 Supported operating systems:

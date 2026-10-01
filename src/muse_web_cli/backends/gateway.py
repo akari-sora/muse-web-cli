@@ -34,6 +34,27 @@ _CAPS = [
 ]
 
 
+def _unwrap(parsed: dict) -> dict:
+    ok = parsed.get("ok")
+    if not isinstance(ok, bool):
+        return parsed
+    if ok and isinstance(parsed.get("result"), dict):
+        return parsed["result"]
+    if ok:
+        return parsed
+    err = parsed.get("error")
+    message = ""
+    if isinstance(err, dict):
+        message = str(err.get("message") or err.get("code") or "")
+    elif isinstance(err, str):
+        message = err
+    raise GatewayError(
+        "ui_changed",
+        safe_text(message) or "gateway 拒絕這次操作",
+        "看 gateway 回的狀態，確認 vm_id 與這項操作。",
+    )
+
+
 class GatewayError(Exception):
     def __init__(self, state: str, error: str, hint: str | None = None):
         super().__init__(error)
@@ -100,6 +121,9 @@ def _text(value: object) -> str:
 
 
 def _message_rows(data: dict) -> list[dict]:
+    events = data.get("chat_events")
+    if isinstance(events, list):
+        return [item for item in events if isinstance(item, dict)]
     if isinstance(data.get("messages"), list):
         return [item for item in data["messages"] if isinstance(item, dict)]
     by_id = data.get("messages_by_id") or data.get("messagesById")
@@ -157,13 +181,38 @@ def _fresh_reply(payload: dict, text: str, prior: list) -> str | None:
 def messages_from(data: dict) -> list[Message]:
     found: list[Message] = []
     for row in _message_rows(data):
-        role = _role(row.get("role") or row.get("author"))
+        role = _role(row.get("role") or row.get("author") or _event_role(row.get("event_name")))
         if role is None:
             continue
-        text = _text(row.get("text") if row.get("text") is not None else row.get("content") or row.get("body"))
+        text = _event_text(row)
         presentation = bool(row.get("presentation") or row.get("card"))
         found.append(Message(role=role, text=text, presentation=presentation, has_actions=True))
     return found
+
+
+def _event_role(value: object) -> str | None:
+    text = str(value or "")
+    if text.endswith(".user"):
+        return "user"
+    if text.endswith(".assistant"):
+        return "assistant"
+    return None
+
+
+def _event_text(row: dict) -> str:
+    for key in ("text", "display_text", "content", "body"):
+        if row.get(key) is not None:
+            text = _text(row.get(key))
+            if text:
+                return text
+    payload = row.get("payload")
+    if isinstance(payload, dict):
+        for key in ("display_text", "text", "content", "body"):
+            if payload.get(key) is not None:
+                text = _text(payload.get(key))
+                if text:
+                    return text
+    return ""
 
 
 def _title(row: dict) -> str:
@@ -413,12 +462,26 @@ class MuseGateway:
     def chats(self, *, action: str | None = None, session: str | None = None, title: str | None = None) -> dict:
         def run():
             if action == "create":
-                created = self._json(DAEMON, "POST", "/session/start", body={"title": title or "新聊天"})
-                new_id = created.get("session_id") if isinstance(created.get("session_id"), str) else None
+                created = self._json(DAEMON, "POST", "/api/chats/start", body={})
+                new_id = created.get("chat_id") if isinstance(created.get("chat_id"), str) else None
+                if not new_id:
+                    new_id = created.get("session_id") if isinstance(created.get("session_id"), str) else None
                 if new_id and new_id.strip():
-                    write_current(self.credential, new_id.strip())
+                    new_id = new_id.strip()
+                    self._json(
+                        DAEMON,
+                        "POST",
+                        "/session/rename",
+                        body={"session_id": new_id, "title": title or "新聊天"},
+                    )
+                    write_current(self.credential, new_id)
             elif action == "rename":
-                self._json(DAEMON, "POST", "/session/rename", body={"session_id": session, "title": title or ""})
+                self._json(
+                    DAEMON,
+                    "POST",
+                    "/session/rename",
+                    body={"session_id": session, "title": title or ""},
+                )
             elif action == "delete":
                 self._json(
                     DAEMON,
@@ -528,7 +591,7 @@ class MuseGateway:
             if path.split("?", 1)[0] == "/chat/stream":
                 return {}
             raise GatewayError("ui_changed", "回應不是 JSON 物件", None)
-        return parsed
+        return _unwrap(parsed)
 
     def _guard(self, kind: str, fn, text: str = ""):
         try:

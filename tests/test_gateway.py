@@ -88,7 +88,7 @@ def _table():
                 ]
             },
         ),
-        "/session/start": (200, {"session_id": "side-2", "title": "新聊天"}),
+        "/api/chats/start": (200, {"chat_id": "side-2", "created": True, "root_agent_id": "agent-1"}),
         "/session/rename": (200, {"ok": True}),
         "/session/delete": (200, {"deleted": True}),
     }
@@ -150,7 +150,7 @@ def test_gateway_covers_every_ui_operation(tmp_path):
         "/activity",
         "/fs/read",
         "/api/session/list",
-        "/session/start",
+        "/api/chats/start",
         "/session/rename",
         "/session/delete",
     ):
@@ -162,6 +162,11 @@ def test_gateway_covers_every_ui_operation(tmp_path):
     assert activity and "capabilities=ACTIVITY_FEED_GOALS" in activity[0]
     deleted = json.loads(next(item[3] for item in script.calls if item[2] == "/session/delete"))
     assert deleted == {"method": "/api/session/delete", "session_id": "side-1"}
+    started = json.loads(next(item[3] for item in script.calls if item[2] == "/api/chats/start"))
+    assert started == {}
+    renamed_bodies = [json.loads(item[3]) for item in script.calls if item[2] == "/session/rename"]
+    assert {"session_id": "side-2", "title": "新聊天"} in renamed_bodies
+    assert {"session_id": "side-1", "title": "改名"} in renamed_bodies
     assert exit_for("ok") == 0
 
 
@@ -208,6 +213,38 @@ def test_unknown_switch_names_the_next_step(tmp_path):
     assert TOKEN not in json.dumps(missing)
     assert not (tmp_path / "muse-current.json").exists()
     assert exit_for(missing["state"]) == 3
+
+
+def test_gateway_unwraps_result_and_chat_events(tmp_path):
+    table = _table()
+    table["/chat/history"] = (
+        200,
+        {
+            "ok": True,
+            "result": {
+                "chat_events": [
+                    {"role": "user", "event_name": "message.user", "display_text": "nonce-text"},
+                    {"event_name": "message.assistant", "payload": {"display_text": "fresh-ok", "role": "assistant"}},
+                ]
+            },
+        },
+    )
+    table["/tasks"] = (
+        200,
+        {"ok": True, "result": {"schedules": [{"id": "job-1", "title": "morning", "schedule_key": "daily"}]}},
+    )
+    table["/fs/read"] = (200, {"ok": True, "result": {"text": "Facts", "len": 5, "eof": True}})
+    script = Script(table)
+    backend = _backend(tmp_path, script)
+    messages = backend.messages(5)
+    assert [item["text"] for item in messages["messages"]] == ["nonce-text", "fresh-ok"]
+    assert backend.upcoming()["groups"][0]["items"][0]["name"] == "morning"
+    assert "Facts" in backend.memory()["text"]
+    refused = Script({"/tasks": (200, {"ok": False, "error": {"message": "method must be set"}})})
+    bad = _backend(tmp_path, refused).upcoming()
+    assert bad["state"] == "ui_changed"
+    assert "method must be set" in bad["error"]
+    assert TOKEN not in json.dumps(messages) + json.dumps(bad)
 
 
 def test_browser_mutation_points_at_the_api(tmp_path, capsys):
