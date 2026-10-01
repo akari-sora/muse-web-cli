@@ -8,6 +8,7 @@ from muse_web_cli.chrome import (
     discover_chrome,
     ensure,
     headed_needs_display,
+    write_state,
     is_main_chrome,
     kill_pid,
     parse_windows_process_json,
@@ -16,7 +17,7 @@ from muse_web_cli.chrome import (
 )
 from muse_web_cli.cli import configure_stdio
 from muse_web_cli.config import resolve_settings
-from tests.fakes import paths
+from tests.fakes import chrome_command, paths
 
 
 def _touch(path: Path) -> Path:
@@ -160,6 +161,27 @@ def test_linux_headed_login_needs_a_display(tmp_path):
     )
     assert result["state"] == "browser_down"
     assert "xvfb-run" in result["hint"]
+    write_state(found.state, {"pid": 5, "port": 9333, "headless": True, "profile": str(found.profile)})
+    killed = []
+    kept = ensure(
+        paths=found,
+        procs=[Proc(5, chrome_command(found.profile, headless=True))],
+        port_open_fn=lambda: False,
+        spawn_fn=lambda argv: 1,
+        kill_fn=killed.append,
+        alive_fn=lambda pid: True,
+        wait_ready=lambda port: True,
+        mode="login",
+        headless=False,
+        autostart=False,
+        chrome=Path("/usr/bin/google-chrome"),
+        port=9333,
+        platform="linux",
+        environ={},
+    )
+    assert killed == []
+    assert kept["pid"] == 5
+    assert kept["state"] == "browser_down"
     assert not headed_needs_display(True, "linux", {})
     assert headed_needs_display(False, "linux", {"DISPLAY": ":1"}) is False
 

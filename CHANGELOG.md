@@ -5,6 +5,7 @@
 - Document first-time setup, every command, exit-code fixes, and troubleshooting in Traditional Chinese and English.
 - Show global flags, defaults, and examples in `--help`.
 - Support Linux, Windows, and macOS: Chrome discovery, process stop, profile locks, and UTF-8 console output. Linux is covered by CI, Windows by CI, and macOS by local tests plus a live read-only check.
+- `login` on Linux without a display returns `browser_down` and leaves an already-running headless Chrome in place.
 - The api backend is a generic client for a credential the user writes. There is no official public Muse API, and the tool never extracts cookies or tokens.
 - Part of trinity-cli: https://gitlab.com/aa22396584/trinity-cli
 

@@ -43,7 +43,7 @@ muse-web-cli --version
 
 設定檔固定是 `~/.trinity-cli/muse-profile`（Windows 也是你的使用者主目錄底下的 `.trinity-cli`）。同一個設定檔同時只能有一個 Chrome。除錯埠預設 `127.0.0.1:9333`。
 
-1. 有視窗登入。工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。不要複製 cookie。
+1. 有視窗登入。工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。沒有顯示器時不會關掉已經在跑的 headless Chrome。不要複製 cookie。
 
 ```bash
 muse-web-cli login
@@ -265,7 +265,7 @@ Upgrade by reinstalling the tag you want with `--force`. Uninstall with `uv tool
 
 The profile is always `~/.trinity-cli/muse-profile` (`Path.home()` on every OS). One Chrome per profile. The debug port defaults to `127.0.0.1:9333`.
 
-1. Log in headed. The tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. Do not copy cookies.
+1. Log in headed. The tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. Without a display, login leaves a running headless Chrome in place. Do not copy cookies.
 
 ```bash
 muse-web-cli login

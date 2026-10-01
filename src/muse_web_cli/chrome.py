@@ -408,6 +408,9 @@ def ensure(
     environ: dict | None = None,
 ) -> dict:
     """Connect to the profile's Chrome, or launch one. Never launches a second."""
+    system = platform or sys.platform
+    env = os.environ if environ is None else environ
+    want_headless = True if mode == "use" else (False if mode == "login" else headless)
     mains = [proc for proc in procs if is_main_chrome(proc, paths.profile)]
     state = read_state(paths.state)
     tracked_pid = state.get("pid") if isinstance(state.get("pid"), int) else None
@@ -417,6 +420,17 @@ def ensure(
         proc = mains[0]
         tracked = tracked_pid == proc.pid and _matches_tracked(proc, paths.profile, state.get("port"))
         owns_headless = tracked and command_is_headless(proc.command)
+        if mode == "login" and owns_headless and headed_needs_display(False, system, env):
+            return _result(
+                state="browser_down",
+                action="connected",
+                port=debug_port(proc.command) or port,
+                headless=True,
+                tracked=True,
+                pid=proc.pid,
+                error="headed Chrome needs a display",
+                hint="Log in on a desktop session, or run xvfb-run muse-web-cli login. Do not copy cookies.",
+            )
         if mode == "login" and owns_headless:
             kill_fn(proc.pid)
             for _ in range(20):
@@ -472,8 +486,6 @@ def ensure(
             hint=None,
         )
 
-    system = platform or sys.platform
-    env = os.environ if environ is None else environ
     if not force_launch and profile_lock_held(paths.profile, platform=system):
         return _result(
             state="profile_busy",
@@ -509,7 +521,6 @@ def ensure(
             error="Google Chrome was not found",
             hint="Install Google Chrome, or set MUSE_WEB_CHROME",
         )
-    want_headless = True if mode == "use" else (False if mode == "login" else headless)
     if headed_needs_display(want_headless, system, env):
         return _result(
             state="browser_down",

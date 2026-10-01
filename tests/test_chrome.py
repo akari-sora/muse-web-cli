@@ -26,6 +26,7 @@ def _ensure(tmp_path, **overrides):
         autostart=True,
         chrome=Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
         port=9333,
+        environ={"DISPLAY": ":1"},
     )
     kwargs.update(overrides)
     result = ensure(**kwargs)
