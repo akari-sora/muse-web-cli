@@ -14,6 +14,7 @@ from muse_web_cli.selectors import (
     EMPTY_SIDE_CHAT,
     KEY_SELECTORS,
     LOGIN_HINT,
+    LOGIN_PHRASES,
     MEMORY_SECTIONS,
     NEW_SIDE_CHAT,
     PANEL_TAB_SELECTORS,
@@ -187,6 +188,8 @@ def assess(snapshot: Snapshot) -> dict:
     chat_up = snapshot.has_log and snapshot.has_composer
     if not chat_up and (url_is_login(snapshot.host, snapshot.path) or snapshot.has_password):
         return _status("session_expired", error="登入工作階段已失效", hint=LOGIN_HINT)
+    if not chat_up and _phrase(snapshot.gate_text, LOGIN_PHRASES):
+        return _status("session_expired", error="還沒有登入 Muse (not logged in)", hint=LOGIN_HINT)
     if not chat_up and _phrase(snapshot.gate_text, BOT_PHRASES):
         return _status("session_expired", error="頁面要求重新登入或人機驗證", hint=LOGIN_HINT)
     if not chat_up and _phrase(snapshot.gate_text, REGION_PHRASES):

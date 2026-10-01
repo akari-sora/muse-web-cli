@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import os
 import re
@@ -103,22 +104,27 @@ def launch_argv(chrome: Path, profile: Path, port: int, *, headless: bool) -> li
     return argv
 
 
-def _profile_arg(command: str) -> str | None:
-    match = re.search(r"--user-data-dir=(?:\"([^\"]+)\"|'([^']+)'|(\S+))", command)
-    if not match:
-        return None
-    return next(group for group in match.groups() if group)
-
-
 def _same_profile(command: str, profile: Path) -> bool:
-    found = _profile_arg(command)
-    if not found:
-        return False
-    return os.path.normcase(os.path.normpath(found)) == os.path.normcase(os.path.normpath(str(profile)))
+    """Windows quotes the whole `"--user-data-dir=C:\\a b"` argument and ps does not quote at all,
+    so look for the expected path after the flag instead of splitting on spaces."""
+    want = os.path.normcase(os.path.normpath(str(profile)))
+    text = os.path.normcase(command)
+    flag = os.path.normcase("--user-data-dir=")
+    start = text.find(flag)
+    while start != -1:
+        rest = text[start + len(flag):].lstrip("\"'")
+        if rest.startswith(want) and rest[len(want):len(want) + 1] in ("", '"', "'", " ", "\t"):
+            return True
+        start = text.find(flag, start + 1)
+    return False
 
 
 def _exe_name(command: str) -> str:
-    exe = command.split(" --", 1)[0].strip().strip('"')
+    text = command.strip()
+    if text.startswith('"'):
+        exe = text[1:].split('"', 1)[0]
+    else:
+        exe = text.split(" --", 1)[0].strip()
     name = Path(exe).name.lower()
     return name[:-4] if name.endswith(".exe") else name
 
@@ -168,6 +174,7 @@ def list_processes() -> list[Proc]:
                 "powershell",
                 "-NoProfile",
                 "-Command",
+                "[Console]::OutputEncoding = [Text.Encoding]::UTF8; "
                 "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress",
             ],
             text=True,
@@ -343,7 +350,16 @@ def file_lock(path: Path):
             if handle.seek(0, os.SEEK_END) == 0:
                 handle.write(" ")
                 handle.flush()
-            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            handle.seek(0)
+            # LK_LOCK gives up after 10 tries; the holder may wait longer for Chrome. Wait like flock.
+            while True:
+                try:
+                    msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+                    break
+                except OSError as exc:
+                    if exc.errno not in (errno.EACCES, errno.EDEADLK):
+                        raise
+                    time.sleep(0.25)
             try:
                 yield
             finally:

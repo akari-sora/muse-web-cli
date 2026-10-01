@@ -1,6 +1,8 @@
 # muse-web-cli
 
 [![pipeline](https://gitlab.com/aa22396584/muse-web-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/commits/main)
+[![release](https://gitlab.com/aa22396584/muse-web-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/releases)
+[![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 [中文](#中文) · [English](#english)
 
@@ -19,6 +21,10 @@ trinity-cli 系列的一部分。Part of the trinity-cli family.
 需要 Python 3.11 以上、`uv` 或 pipx、以及已安裝的 Google Chrome（或 Chromium）。Playwright 只拿來接上你自己的 Chrome。**不要**執行 `playwright install`。安裝時設定 `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1`。不支援 Edge。
 
 若頁面顯示這個地區無法使用 Muse，`status` 會是 `region_blocked`（結束碼 2）。這個工具不會繞過地區限制。
+
+非官方：這是個人專案，跟 Meta 沒有關係，也沒有得到 Meta 的背書或支援。瀏覽器後端驅動你自己登入的網頁；api 後端呼叫沒有公開文件的 Muse gateway。兩者都可能隨時失效。自動化使用可能違反 Meta 的使用條款，或讓帳號受到限制，風險自負。
+
+支援的系統見[平台](#平台)。
 
 ### 安裝
 
@@ -211,18 +217,9 @@ muse-web-cli credential
 }
 ```
 
-`auth.type` 也可以是 `header`，那時用 `header_name`。指到 Muse gateway 時改放 `vm_id`（token 請自己換掉）：
+`auth.type` 也可以是 `header`，那時用 `header_name`。上面這種 `endpoints` 檔是給你自己架的 REST 服務用的。Muse gateway 的檔案由 `muse-web-cli credential` 寫入，裡面是 `vm_id` 而不是 `endpoints`。不要手動填，也不要從瀏覽器複製 token。
 
-```json
-{
-  "base_url": "https://hatch.metaaivm.com",
-  "vm_id": "your-vm-id",
-  "auth": {"type": "bearer", "token": "replace-me"},
-  "timeout_s": 30
-}
-```
-
-檔案不存在，或沒有 `vm_id` 而且這個指令沒有 endpoint：結束碼 4。401／403 是 `session_expired`（結束碼 2），下一步是換掉 `auth.token`。其它 4xx 與 5xx 是 `ui_changed`（結束碼 3）。伺服器自己回的 `error`、`hint` 會先清掉 token、Bearer、JWT 這類字串再印出。逾時是 `timeout`（結束碼 3），`send` 不會再送一次。`send --wait` 若回應沒有 `reply`，只會再讀 `messages`，不會重送。gateway 的 `send --wait` 等到同一條 Noise 串流讀完才讀下一個請求；串流太久沒動靜時會繼續等到 `--timeout`。`chats --create`、`--rename`、`--delete`、`--switch` 只在 `--backend api` 送出請求。瀏覽器後端維持只讀列表。
+檔案不存在，或沒有 `vm_id` 而且這個指令沒有 endpoint：結束碼 4。401／403 是 `session_expired`（結束碼 2）。Muse gateway：在 Chrome 重新登入後再跑 `muse-web-cli credential`。你自己的 REST 服務：換掉 `auth.token`。其它 4xx 與 5xx 是 `ui_changed`（結束碼 3）。伺服器自己回的 `error`、`hint` 會先清掉 token、Bearer、JWT 這類字串再印出。逾時是 `timeout`（結束碼 3），`send` 不會再送一次。`send --wait` 若回應沒有 `reply`，只會再讀 `messages`，不會重送。gateway 的 `send --wait` 等到同一條 Noise 串流讀完才讀下一個請求；串流太久沒動靜時會繼續等到 `--timeout`。`chats --create`、`--rename`、`--delete`、`--switch` 只在 `--backend api` 送出請求。瀏覽器後端維持只讀列表。
 
 `start` / `stop` / `login` / `selftest` 永遠管本地 Chrome，不走 api。
 
@@ -237,6 +234,28 @@ muse-web-cli credential
 - 副聊天室開著：`messages` 讀的是目前這一則。先跑 `chats` 看 `kind` 與 `is_current`。它不會幫你切回主聊天室。
 - Muse 改版後選擇器不見：`ui_changed`。`selftest` 的 `missing` 會列出缺的名稱。
 
+### 隱私
+
+- 瀏覽器後端只在本機驅動專用的 Chrome 設定檔 `~/.trinity-cli/muse-profile`。登入狀態留在那個設定檔裡，工具不讀 cookie。
+- api 後端只連 Muse gateway，用 `~/.trinity-cli/muse-credential` 裡的 token。這個檔等於你的登入，不要分享或提交。
+- 沒有遙測。除了設定檔、憑證檔，以及 `~/.trinity-cli` 裡的 Chrome 狀態和目前聊天室的小檔案，不在磁碟上存任何東西，也不存訊息。
+- 文字輸出和 `--json` 有訊息內容和聊天室資訊。貼到 issue 前先刪掉。
+- `uv tool uninstall` 不會刪設定檔和憑證檔。不再使用時，先 `muse-web-cli stop`，再自己刪掉 `~/.trinity-cli/muse-profile` 和 `~/.trinity-cli/muse-credential`。
+
+### 平台
+
+| 系統 | Python | 驗證方式 |
+| --- | --- | --- |
+| Linux | 3.12 | GitLab CI：離線單元測試 |
+| Windows | 3.12 | GitLab CI：同一套測試，改到程式、測試或打包設定時自動跑 |
+| macOS | 3.11、3.12、3.13 | 維護者本機：同一套測試，加上照這份 README 從 tag 安裝、用新的 Chrome 設定檔跑到登入牆（`session_expired`）的首次使用檢查 |
+
+測試不連 Muse，也不開真的 Chrome。Linux 和 Windows 上真的 Chrome 只靠單元測試涵蓋，沒有實機檢查。
+
+### 參與開發
+
+見 [CONTRIBUTING.md](CONTRIBUTING.md)。安全問題照 [SECURITY.md](SECURITY.md) 回報，不要開公開 issue。
+
 ### 和 trinity-cli 一起用
 
 座位不要依後端分支。建議 `--json --autostart`。專案：<https://gitlab.com/aa22396584/trinity-cli>
@@ -245,7 +264,7 @@ muse-web-cli credential
 
 - trinity-cli — 一個 CLI 管三個常駐代理（Your dot、Grok Bot、Muse）：<https://gitlab.com/aa22396584/trinity-cli>
 - chatgpt-dot-cli — ChatGPT Your dot：<https://gitlab.com/aa22396584/chatgpt-dot-cli>
-- grok-bot-cli（fork，`gbot`）— Grok Bot：<https://gitlab.com/aa22396584/grok-bot-cli>（鏡像 <https://github.com/ImL1s/grok-bot-cli>）
+- grok-bot-cli（fork，`gbot`）— Grok Bot：<https://gitlab.com/aa22396584/grok-bot-cli>
 - muse-web-cli — 透過網頁操作 Meta Muse（這個 repo）：<https://gitlab.com/aa22396584/muse-web-cli>
 
 CI 預設使用 GitLab.com 的 runner。維護者可設定 CI/CD 變數 `LINUX_RUNNER_TAG` 與 `WINDOWS_RUNNER_TAG`，把 job 指到自己的 runner。
@@ -265,6 +284,10 @@ The command is `muse-web-cli`. The name `muse` belongs to Meta's Muse Code (`~/.
 You need Python 3.11+, uv or pipx, and Google Chrome or Chromium already installed. Playwright attaches to that Chrome. Do **not** run `playwright install`. Set `PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1` when installing. Edge is not supported.
 
 If the page says Muse is not available in your region, `status` returns `region_blocked` (exit 2). The tool does not bypass that.
+
+Unofficial: this is a personal project, not affiliated with, endorsed by, or supported by Meta. The browser backend drives the web app you logged into yourself; the api backend calls the undocumented Muse gateway. Either can break at any time. Automated use may break Meta's terms or get the account limited; any risk is yours.
+
+Supported systems: see [Platforms](#platforms).
 
 ### Install
 
@@ -457,7 +480,9 @@ Example (the token is fake):
 }
 ```
 
-`auth.type` may also be `header`, which uses `header_name`. To use the Muse gateway, set `vm_id` and `base_url` to `https://hatch.metaaivm.com` instead of `endpoints`. A missing file, or no `vm_id` and no endpoint for that command, is exit 4. HTTP 401/403 is `session_expired` (exit 2); replace `auth.token`. Other 4xx and 5xx are `ui_changed` (exit 3). A server's own `error` and `hint` are scrubbed of token, Bearer, and JWT strings before printing. A timeout is `timeout` (exit 3), and `send` is not repeated. If `send --wait` gets no `reply`, the client only reads `messages`. It does not post again. On the gateway, `send --wait` finishes reading the open Noise stream before the next request; if that stream is quiet for a while it keeps waiting until `--timeout`. `chats --create`, `--rename`, `--delete`, and `--switch` send those requests only with `--backend api`.
+`auth.type` may also be `header`, which uses `header_name`. An `endpoints` file like the one above is for a REST service you run yourself. The Muse gateway file is written by `muse-web-cli credential` and holds `vm_id` instead of `endpoints`. Do not write it by hand or copy a token out of the browser.
+
+A missing file, or no `vm_id` and no endpoint for that command, is exit 4. HTTP 401/403 is `session_expired` (exit 2). For the Muse gateway, sign in again in Chrome and rerun `muse-web-cli credential`. For your own REST service, replace `auth.token`. Other 4xx and 5xx are `ui_changed` (exit 3). A server's own `error` and `hint` are scrubbed of token, Bearer, and JWT strings before printing. A timeout is `timeout` (exit 3), and `send` is not repeated. If `send --wait` gets no `reply`, the client only reads `messages`. It does not post again. On the gateway, `send --wait` finishes reading the open Noise stream before the next request; if that stream is quiet for a while it keeps waiting until `--timeout`. `chats --create`, `--rename`, `--delete`, and `--switch` send those requests only with `--backend api`.
 
 `start`, `stop`, `login`, and `selftest` always manage the local Chrome. They are not the api seam.
 
@@ -472,6 +497,28 @@ Memory is read-only. The tool never clicks settings, connectors, invites, attach
 - A side chat is open: `messages` reads the current chat. Run `chats` and look at `kind` and `is_current`. It does not switch back to the main chat.
 - Muse shipped a new UI and selectors are gone: `ui_changed`. `selftest` lists the missing names in `missing`.
 
+### Privacy
+
+- The browser backend drives a dedicated Chrome profile, `~/.trinity-cli/muse-profile`, on your machine only. The login stays in that profile; the tool does not read cookies.
+- The api backend talks only to the Muse gateway, with the token in `~/.trinity-cli/muse-credential`. That file is as good as your login; do not share or commit it.
+- There is no telemetry. Apart from the profile, the credential file, and small Chrome-state and current-chat files in `~/.trinity-cli`, nothing is written to disk, and no messages are stored.
+- Text output and `--json` contain message text and chat details. Remove them before pasting into an issue.
+- `uv tool uninstall` leaves the profile and the credential file. When you are done, run `muse-web-cli stop`, then delete `~/.trinity-cli/muse-profile` and `~/.trinity-cli/muse-credential` yourself.
+
+### Platforms
+
+| OS | Python | How it was checked |
+| --- | --- | --- |
+| Linux | 3.12 | GitLab CI: the offline unit suite |
+| Windows | 3.12 | GitLab CI: the same suite, run automatically when code, tests, or packaging change |
+| macOS | 3.11, 3.12, 3.13 | Maintainer machine: the same suite, plus a first-run check that installs from the tag as this README says and reaches the login wall (`session_expired`) with a fresh Chrome profile |
+
+The tests do not contact Muse or start a real Chrome. On Linux and Windows, real Chrome is covered by unit tests only, with no live check.
+
+### Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md). Report security problems as described in [SECURITY.md](SECURITY.md), not in a public issue.
+
 ### Use with trinity-cli
 
 Do not branch on backend. Pass `--json --autostart`. Project: <https://gitlab.com/aa22396584/trinity-cli>
@@ -480,7 +527,7 @@ Do not branch on backend. Pass `--json --autostart`. Project: <https://gitlab.co
 
 - trinity-cli — one CLI over three always-on agents (Your dot, Grok Bot, Muse): <https://gitlab.com/aa22396584/trinity-cli>
 - chatgpt-dot-cli — ChatGPT Your dot: <https://gitlab.com/aa22396584/chatgpt-dot-cli>
-- grok-bot-cli (fork, `gbot`) — Grok Bot: <https://gitlab.com/aa22396584/grok-bot-cli> (mirror <https://github.com/ImL1s/grok-bot-cli>)
+- grok-bot-cli (fork, `gbot`) — Grok Bot: <https://gitlab.com/aa22396584/grok-bot-cli>
 - muse-web-cli — Meta Muse via the web (this repo): <https://gitlab.com/aa22396584/muse-web-cli>
 
 CI uses GitLab.com runners by default. Maintainers can point jobs at their own runners by setting the CI/CD variables `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG`.

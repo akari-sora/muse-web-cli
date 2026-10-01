@@ -147,6 +147,16 @@ REGION_PHRASES = (
     "你所在的地區無法使用",
     "目前無法在你的國家",
 )
+# The signed-out landing page stays on muse.ai/ and has no password field.
+LOGIN_PHRASES = (
+    "log in or create an account",
+    "log in or sign up",
+    "sign in or create an account",
+    "登入或建立帳號",
+    "登入或註冊",
+    "登录或创建账号",
+    "登录或注册",
+)
 # Headless bot walls are reported as session_expired; the hint is to log in headed.
 BOT_PHRASES = (
     "confirm you're human",
@@ -164,7 +174,7 @@ MUSE_URL = "https://muse.ai/"
 LOGIN_HINT = "muse-web-cli login"
 API_UNAVAILABLE = (
     "找不到 ~/.trinity-cli/muse-credential。"
-    "請執行 muse-web-cli credential（mode 600）。需要 base_url、auth.type、auth.token、vm_id。"
+    "請執行 muse-web-cli credential，它會寫好這個檔（mode 600）。"
 )
 API_HINT = (
     "執行 muse-web-cli credential，或 trinity-cli login muse。"

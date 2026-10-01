@@ -313,7 +313,7 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
     if action:
         raise ConfigError(
             "瀏覽器後端只讀聊天列表。建、改、刪、切換請加 --backend api，"
-            "並在 ~/.trinity-cli/muse-credential 填 base_url、auth.token、vm_id。"
+            "並先執行 muse-web-cli credential 寫好 ~/.trinity-cli/muse-credential。"
         )
     if getattr(args, "session", None):
         raise ConfigError(
@@ -416,14 +416,6 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
     raw = list(sys.argv[1:] if argv is None else argv)
     try:
         cleaned, as_json, port, backend, autostart, chrome = _split_globals(raw)
-        settings = resolve_settings(
-            home=home,
-            port=port,
-            backend=backend,
-            autostart=autostart,
-            chrome=chrome,
-            environ=os.environ,
-        )
     except ConfigError as exc:
         print(safe_text(str(exc)), file=sys.stderr)
         return 2
@@ -435,6 +427,18 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
         return 2 if code is None else int(code)
     if not args.command:
         parser.print_help()
+        return 2
+    try:
+        settings = resolve_settings(
+            home=home,
+            port=port,
+            backend=backend,
+            autostart=autostart,
+            chrome=chrome,
+            environ=os.environ,
+        )
+    except ConfigError as exc:
+        print(safe_text(str(exc)), file=sys.stderr)
         return 2
     try:
         if args.command == "messages" and args.limit < 1:

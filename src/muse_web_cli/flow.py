@@ -56,9 +56,35 @@ def _page_error(kind: str, missing: str) -> dict:
     return _fail(kind, status)
 
 
-def collect_status(driver) -> dict:
+SETTLE_SECONDS = 8.0
+SETTLE_STEP = 0.5
+
+
+def _blank(snap: Snapshot, status: dict) -> bool:
+    return (
+        status["state"] == "ui_changed"
+        and not snap.has_log
+        and not snap.has_composer
+        and not any(snap.selectors.values())
+    )
+
+
+def settled_snapshot(driver, *, sleep=None, clock=None) -> tuple[Snapshot, dict]:
+    """A just-started Chrome may not have rendered anything we know yet."""
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
     snap = driver.snapshot()
     status = assess(snap)
+    deadline = clock() + SETTLE_SECONDS
+    while _blank(snap, status) and clock() < deadline:
+        sleep(SETTLE_STEP)
+        snap = driver.snapshot()
+        status = assess(snap)
+    return snap, status
+
+
+def collect_status(driver) -> dict:
+    snap, status = settled_snapshot(driver)
     if status["state"] != "ok":
         return status
     try:
@@ -71,8 +97,7 @@ def collect_status(driver) -> dict:
 
 
 def collect_messages(driver, limit: int) -> dict:
-    snap = driver.snapshot()
-    status = assess(snap)
+    snap, status = settled_snapshot(driver)
     if status["state"] != "ok":
         return empty_like("messages", status)
     return messages_payload(snap.messages, backend="browser", limit=limit)
@@ -81,8 +106,7 @@ def collect_messages(driver, limit: int) -> dict:
 def perform_send(driver, text: str, *, wait: bool, timeout: float) -> dict:
     """Insert the draft once, press Enter once, then wait. A timeout does not send again."""
     started = time.monotonic()
-    snap: Snapshot = driver.snapshot()
-    status = assess(snap)
+    snap, status = settled_snapshot(driver)
     if status["state"] != "ok":
         return send_payload(
             backend="browser",

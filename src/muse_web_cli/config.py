@@ -45,15 +45,25 @@ def parse_bool(value: object, default: bool) -> bool:
     raise ConfigError(f"invalid boolean: {value}")
 
 
+def _shown(path: Path) -> str:
+    try:
+        return str(Path("~") / path.resolve().relative_to(Path.home().resolve()))
+    except (ValueError, OSError, RuntimeError):
+        return path.name
+
+
 def load_config(path: Path) -> dict:
     if not path.exists():
         return {}
+    raw = path.read_bytes()
+    # PowerShell 5.1 `>` writes UTF-16; Notepad may add a UTF-8 BOM.
+    encoding = "utf-16" if raw[:2] in (b"\xff\xfe", b"\xfe\xff") else "utf-8-sig"
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
-    except json.JSONDecodeError as exc:
-        raise ConfigError(f"config is not JSON: {path}") from exc
+        data = json.loads(raw.decode(encoding))
+    except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise ConfigError(f"config is not UTF-8 JSON: {_shown(path)}") from exc
     if not isinstance(data, dict):
-        raise ConfigError(f"config must be a JSON object: {path}")
+        raise ConfigError(f"config must be a JSON object: {_shown(path)}")
     return data
 
 

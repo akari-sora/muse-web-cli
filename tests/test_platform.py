@@ -71,6 +71,71 @@ def test_linux_and_windows_process_names(tmp_path):
     assert not is_main_chrome(Proc(3, helper), profile)
 
 
+def test_profile_path_with_a_space_matches_in_windows_and_ps_forms(tmp_path):
+    profile = tmp_path / "John Smith" / "muse-profile"
+    windows = f'"C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" "--user-data-dir={profile}" --remote-debugging-port=9333'
+    ps = f"/usr/bin/google-chrome --user-data-dir={profile} --remote-debugging-port=9333"
+    assert is_main_chrome(Proc(1, windows), profile)
+    assert is_main_chrome(Proc(2, ps), profile)
+    other = f"/usr/bin/google-chrome --user-data-dir={profile}-old --remote-debugging-port=9333"
+    assert not is_main_chrome(Proc(3, other), profile)
+    assert not is_main_chrome(Proc(4, f"/usr/bin/google-chrome --user-data-dir={tmp_path / 'John'}"), profile)
+
+
+def test_windows_lock_keeps_waiting_while_another_process_holds_it(tmp_path, monkeypatch):
+    import errno
+    import sys
+    import types
+
+    from muse_web_cli import chrome
+
+    calls = []
+
+    def locking(fd, mode, size):
+        calls.append(mode)
+        if mode == "nb" and calls.count("nb") <= 50:
+            raise OSError(errno.EACCES, "locked")
+
+    fake = types.SimpleNamespace(LK_NBLCK="nb", LK_UNLCK="un", LK_LOCK="lock", locking=locking)
+    monkeypatch.setitem(sys.modules, "msvcrt", fake)
+    monkeypatch.setattr(chrome.sys, "platform", "win32")
+    monkeypatch.setattr(chrome.time, "sleep", lambda seconds: None)
+    with chrome.file_lock(tmp_path / "muse.lock"):
+        pass
+    assert calls.count("nb") == 51
+    assert calls[-1] == "un"
+    assert "lock" not in calls
+
+
+def test_config_with_bom_or_utf16_loads_and_bad_bytes_do_not_print_the_path(tmp_path):
+    from muse_web_cli.config import ConfigError, load_config
+
+    path = tmp_path / "muse-web-cli.json"
+    path.write_bytes('{"port": 9444}'.encode("utf-8-sig"))
+    assert load_config(path) == {"port": 9444}
+    path.write_bytes('{"port": 9444}'.encode("utf-16"))
+    assert load_config(path) == {"port": 9444}
+    path.write_bytes(b"\x80\x81{")
+    try:
+        load_config(path)
+    except ConfigError as exc:
+        assert str(tmp_path) not in str(exc)
+    else:
+        raise AssertionError("bad bytes should be a ConfigError")
+
+
+def test_help_and_version_work_with_a_broken_config(tmp_path, capsys):
+    from muse_web_cli.cli import main
+
+    config = tmp_path / ".trinity-cli" / "muse-web-cli.json"
+    config.parent.mkdir(parents=True)
+    config.write_bytes(b"\x80 not json")
+    assert main(["--version"], home=tmp_path) == 0
+    assert main(["--help"], home=tmp_path) == 0
+    assert main(["status"], home=tmp_path) == 2
+    assert "not UTF-8 JSON" in capsys.readouterr().err
+
+
 def test_windows_process_json():
     raw = json.dumps([{"ProcessId": 4, "CommandLine": "chrome.exe --user-data-dir=C:\\p"}, {"ProcessId": 5, "CommandLine": None}])
     found = parse_windows_process_json(raw)

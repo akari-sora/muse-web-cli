@@ -662,7 +662,7 @@ class MuseGateway:
         except OSError as exc:
             raise GatewayError("ui_changed", safe_text(str(exc)) or "連不到 gateway", "檢查 base_url 與 vm_id。") from exc
         if status in {401, 403}:
-            raise GatewayError("session_expired", "憑證被拒絕", "換掉 auth.token 後再試。這個工具不會印出 token。")
+            raise GatewayError("session_expired", "憑證被拒絕", "在 Chrome 重新登入 Muse，再執行 muse-web-cli credential。這個工具不會印出 token。")
         if status >= 400:
             raise GatewayError("ui_changed", _GATEWAY_REJECTED, _GATEWAY_HINT)
         if not payload:

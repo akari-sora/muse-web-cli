@@ -48,7 +48,7 @@ def test_api_missing_file_is_unsupported(tmp_path):
     payload = ApiBackend(tmp_path / "muse-credential").status()
     assert payload["state"] == "unsupported"
     assert "muse-credential" in payload["error"]
-    assert "vm_id" in payload["error"]
+    assert "muse-web-cli credential" in payload["error"]
     assert exit_for(payload["state"]) == 4
     assert CANARY not in json.dumps(payload)
 

@@ -1,4 +1,5 @@
 import json
+from unittest import mock
 
 from muse_web_cli.flow import message_from_raw
 from muse_web_cli.model import (
@@ -37,6 +38,66 @@ def test_session_expired_on_password_and_on_login_url():
     assert exit_for(expired["state"]) == 2
     redirected = assess(ok_snapshot(host="www.facebook.com", path="/login.php", has_log=False, has_composer=False, selectors={}))
     assert redirected["state"] == "session_expired"
+
+
+def test_signed_out_landing_page_is_session_expired_not_ui_changed():
+    for heading in ("登入或建立帳號", "Log in or create an account"):
+        status = assess(
+            ok_snapshot(
+                host="muse.ai",
+                path="/",
+                has_log=False,
+                has_composer=False,
+                selectors={},
+                gate_text=f"Muse — Your Personal AI Agent\n{heading}",
+            )
+        )
+        assert status["state"] == "session_expired"
+        assert status["hint"] == "muse-web-cli login"
+        assert status["missing"] == []
+        assert exit_for(status["state"]) == 2
+
+
+def test_status_waits_for_a_just_started_page_to_render():
+    from muse_web_cli.flow import collect_status
+
+    blank = ok_snapshot(has_log=False, has_composer=False, selectors={}, gate_text="")
+    signed_out = ok_snapshot(
+        has_log=False, has_composer=False, selectors={}, gate_text="Muse\n登入或建立帳號"
+    )
+
+    class Driver:
+        def __init__(self):
+            self.shots = [blank, blank, signed_out]
+
+        def snapshot(self):
+            return self.shots.pop(0) if len(self.shots) > 1 else self.shots[0]
+
+    sleeps = []
+    with mock.patch("muse_web_cli.flow.time.sleep", side_effect=sleeps.append):
+        status = collect_status(Driver())
+    assert status["state"] == "session_expired"
+    assert len(sleeps) == 2
+
+
+def test_a_page_with_nothing_known_is_ui_changed_after_the_settle_window():
+    from muse_web_cli.flow import SETTLE_SECONDS, settled_snapshot
+
+    blank = ok_snapshot(has_log=False, has_composer=False, selectors={}, gate_text="")
+
+    class Driver:
+        def snapshot(self):
+            return blank
+
+    ticks = iter(range(0, 100))
+    _, status = settled_snapshot(Driver(), sleep=lambda _: None, clock=lambda: float(next(ticks)))
+    assert status["state"] == "ui_changed"
+    assert next(ticks) <= SETTLE_SECONDS + 3
+
+
+def test_login_phrase_in_a_live_chat_is_ignored():
+    live = ok_snapshot(gate_text="Log in or create an account")
+    assert assess(live)["state"] == "ok"
 
 
 def test_region_blocked_only_when_chat_is_down():

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- A fresh profile that lands on Muse's signed-out page reports `session_expired` with the `muse-web-cli login` hint. It used to say `ui_changed`.
+- `status`, `messages`, and `send` wait up to 8 seconds for a just-started Chrome to render the page before deciding it changed.
+- `--help` and `--version` work even when the config file is broken.
+- A config file saved with a UTF-8 byte-order mark, or as UTF-16 by PowerShell 5.1, loads. A config that is not text says so without printing the full path.
+- Windows: a profile path with a space matches the running Chrome; PowerShell process output is read as UTF-8; the profile lock waits while another process holds it instead of failing at once.
+- Hints say to rerun `muse-web-cli credential` instead of editing `auth.token` by hand.
+- Docs: disclaimer and terms risk, privacy, platform matrix, and the uninstall cleanup. The gateway credential is written by `credential`, never by hand. CONTRIBUTING.md, SECURITY.md, and issue and merge request templates. No mirror link.
+
 ## [0.1.4] - 2026-10-01
 
 - `send --wait` on the gateway now finds the reply in a chat longer than 20 messages. 0.1.3 compared positions in two windows that each hold only the latest messages, so in a long chat every wait timed out even after the reply arrived. The pre-send window and the poll are now lined up by content, and the poll reads 50 messages.

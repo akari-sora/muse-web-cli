@@ -176,7 +176,8 @@ def test_gateway_auth_timeout_and_redaction(tmp_path):
     denied = Script({"/health": (401, b"token=unit-test-token")})
     payload = _backend(tmp_path, denied).status()
     assert payload["state"] == "session_expired"
-    assert "auth.token" in payload["hint"]
+    assert "muse-web-cli credential" in payload["hint"]
+    assert "auth.token" not in payload["hint"]
     assert TOKEN not in json.dumps(payload)
     assert exit_for(payload["state"]) == 2
 
@@ -254,7 +255,7 @@ def test_browser_mutation_points_at_the_api(tmp_path, capsys):
     code = main(["chats", "--create"], home=tmp_path)
     assert code == 2
     err = capsys.readouterr().err
-    assert "vm_id" in err
+    assert "muse-web-cli credential" in err
     assert "--backend api" in err
 
 
