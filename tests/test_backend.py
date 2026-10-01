@@ -55,7 +55,8 @@ def test_api_refuses_loose_permissions_and_never_reads(tmp_path):
     path = tmp_path / "muse-credential"
     path.write_text(CANARY, encoding="utf-8")
     os.chmod(path, 0o644)
-    loose = ApiBackend(path).status()
+    # Force the POSIX rule. On Windows the real platform skips the mode check.
+    loose = ApiBackend(path, platform="posix").status()
     assert loose["state"] == "credential_permissions"
     assert "mode 600" in loose["error"]
     assert CANARY not in json.dumps(loose)
