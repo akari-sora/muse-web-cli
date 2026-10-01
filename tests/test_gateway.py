@@ -1,5 +1,6 @@
 import base64
 import json
+import os
 
 from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.cli import main
@@ -276,7 +277,8 @@ def test_switch_accepts_the_id_the_list_prints(tmp_path):
     printed = next(item["session_id"] for item in listed["chats"] if item.get("session_id") == "side-printed")
     switched = backend.chats(action="switch", session=printed)
     assert switched["state"] == "ok"
-    assert (tmp_path / "muse-current.json").stat().st_mode & 0o777 == 0o600
+    if os.name != "nt":
+        assert (tmp_path / "muse-current.json").stat().st_mode & 0o777 == 0o600
 
 
 def test_create_without_an_id_is_not_ok(tmp_path):
