@@ -5,6 +5,7 @@ from __future__ import annotations
 from muse_web_cli.errors import BrowserDown
 from muse_web_cli.flow import (
     collect_activity,
+    collect_chats,
     collect_memory,
     collect_messages,
     collect_pending,
@@ -77,6 +78,12 @@ class BrowserBackend:
             return collect_activity(self.driver)
         except BrowserDown as exc:
             return self._down(exc, "activity")
+
+    def chats(self) -> dict:
+        try:
+            return collect_chats(self.driver)
+        except BrowserDown as exc:
+            return self._down(exc, "chats")
 
     def memory(self) -> dict:
         try:

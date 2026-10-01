@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from muse_web_cli.errors import PageChanged
 from muse_web_cli.selectors import (
     AVATAR_BUTTON,
     COMPOSER,
     EDITOR_CLOSE,
     MEMORY_FILE,
+    SWITCHER,
     TAB_ACTIVITY,
     TAB_IDENTITY,
     TAB_PENDING,
@@ -18,6 +20,7 @@ from muse_web_cli.selectors import (
 ALLOWED_CLICKS = frozenset(
     {
         COMPOSER,
+        SWITCHER,
         TAB_PENDING,
         TAB_UPCOMING,
         TAB_ACTIVITY,
@@ -74,3 +77,18 @@ def read_memory_flow(
                 click(AVATAR_BUTTON)
             if original and original != TAB_IDENTITY:
                 click(original)
+
+
+def read_chats_flow(*, is_open: Callable[[], bool], open_panel: Callable[[], None], close_panel: Callable[[], None], read: Callable[[], dict]) -> dict:
+    """Open the switcher only when it is closed, then restore that state."""
+    opened = False
+    if not is_open():
+        opened = True
+        open_panel()
+    try:
+        if not is_open():
+            raise PageChanged("side_chats")
+        return read()
+    finally:
+        if opened:
+            close_panel()

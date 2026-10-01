@@ -16,18 +16,18 @@
 
 需要 Python 3.11 以上，以及已安裝的 Google Chrome。Playwright 只拿來接上你自己的 Chrome，不必再下載瀏覽器。
 
-v0.1.0：
+v0.1.1：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
 ```
 
 升級時把標籤改成要裝的版本，再裝一次：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
 ```
 
 移除：
@@ -86,6 +86,7 @@ muse-web-cli pending
 muse-web-cli upcoming
 muse-web-cli activity
 muse-web-cli memory
+muse-web-cli chats
 muse-web-cli selftest
 ```
 
@@ -93,7 +94,8 @@ muse-web-cli selftest
 - `send` 用 `insertText` 加 Enter，只送一次。`--wait` 等到新的助理訊息完成：複製回覆的按鈕出現，而且 `aria-busy` 與 `data-hatch-markdown-streaming` 都是 false，或這兩個屬性在完成後已被拿掉。逾時不會重送。
 - `pending` 只讀，不點核可或拒絕。
 - `memory` 只讀 Lexical 編輯器的 `innerText`，不會聚焦、不會打字。
-- `selftest` 只檢查選擇器在不在，不點任何東西。
+- `chats` 只列出主聊天室和副聊天室。它會打開切換面板、讀完、再關回原來的畫面。不點「新副聊天室」，也不會打開任何一則聊天。
+- `selftest` 只檢查選擇器在不在，不點任何東西。切換鈕 `hatch-chat-switcher-trigger` 必須在。
 
 不會點的東西：設定、連接器、邀請、附加檔案、新的側邊聊天、記憶編輯器工具列、核可／拒絕。
 
@@ -118,6 +120,7 @@ muse-web-cli --json --autostart pending
 muse-web-cli --json --autostart upcoming
 muse-web-cli --json --autostart activity
 muse-web-cli --json --autostart memory
+muse-web-cli --json --autostart chats
 ```
 
 `status`：
@@ -151,6 +154,8 @@ muse-web-cli --json --autostart memory
 `activity`：同樣有 `groups`，item 是 `{"title","detail","time"}`。
 
 `memory`：`{"backend","state","chars","sections","text","error","hint"}`。`sections` 是內文裡看得到的 `Facts`、`Preferences`、`Commitments`。
+
+`chats`：`{"backend","state","count","chats","error","hint"}`。每一則是 `{"title","is_current","kind"}`，`kind` 是 `main` 或 `side`。沒有副聊天室時 `count` 是主聊天室那一則。
 
 api 後端用同一組鍵。還沒實作時 `state` 是 `unsupported`，結束碼 4，列表是空的，`memory.text` 是空字串。
 
@@ -186,18 +191,18 @@ It works without a visible window. Log in once headed, then `start --headless` o
 
 Python 3.11+, and Google Chrome already installed. Playwright attaches to that Chrome. Do not download a Playwright browser.
 
-v0.1.0:
+v0.1.1:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
 ```
 
 Upgrade by reinstalling the tag you want:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.0"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install --force "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.1"
 ```
 
 Uninstall:
@@ -256,6 +261,7 @@ muse-web-cli pending
 muse-web-cli upcoming
 muse-web-cli activity
 muse-web-cli memory
+muse-web-cli chats
 muse-web-cli selftest
 ```
 
@@ -263,7 +269,8 @@ muse-web-cli selftest
 - `send` uses insertText and Enter, once. `--wait` finishes when the copy-reply action is present and both `aria-busy` and `data-hatch-markdown-streaming` are false, or those attributes have already been removed. A timeout never resends.
 - `pending` is read-only. It does not approve or reject.
 - `memory` reads the Lexical editor's `innerText`. It does not focus or type.
-- `selftest` checks that selectors exist. It clicks nothing.
+- `chats` lists the main chat and any side chats. It opens the switcher, reads, and restores the previous view. It does not click "新副聊天室" / new side chat, and it does not open a chat.
+- `selftest` checks that selectors exist. It clicks nothing. The switcher trigger `hatch-chat-switcher-trigger` is required.
 
 It never clicks settings, connector cards, invites, attach file, a new side chat, the memory editor toolbar, or approve/reject.
 
@@ -288,6 +295,7 @@ muse-web-cli --json --autostart pending
 muse-web-cli --json --autostart upcoming
 muse-web-cli --json --autostart activity
 muse-web-cli --json --autostart memory
+muse-web-cli --json --autostart chats
 ```
 
 `status`:
@@ -321,6 +329,8 @@ Without `--wait`, `reply` and `presentation` are null. On timeout, `state` is `t
 `activity`: the same `groups` shape, items `{"title","detail","time"}`.
 
 `memory`: `{"backend","state","chars","sections","text","error","hint"}`. `sections` lists `Facts`, `Preferences`, and `Commitments` when they appear in the text.
+
+`chats`: `{"backend","state","count","chats","error","hint"}`. Each chat is `{"title","is_current","kind"}` with `kind` `main` or `side`. With no side chats, `count` is the main chat only.
 
 The api backend uses the same keys. Until it is implemented, `state` is `unsupported`, the exit code is 4, lists are empty, and `memory.text` is an empty string.
 

@@ -155,7 +155,8 @@ def test_memory_closes_editor_without_typing():
     assert text == "Facts\nhello"
     assert clicks == [TAB_IDENTITY, MEMORY_FILE, EDITOR_CLOSE, TAB_ACTIVITY]
     assert SEND_BUTTON not in ALLOWED_CLICKS
-    assert SWITCHER not in ALLOWED_CLICKS
+    assert SWITCHER in ALLOWED_CLICKS
+    assert '[data-testid="hatch-side-chats-options"]' not in ALLOWED_CLICKS
     with pytest.raises(Exception):
         guard_click('[data-testid="hatch-dock-more"]')
     with pytest.raises(Exception):

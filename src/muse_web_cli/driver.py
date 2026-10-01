@@ -11,9 +11,9 @@ from urllib.parse import urlsplit
 from muse_web_cli.errors import BrowserDown, PageChanged
 from muse_web_cli.flow import WaitResult, message_from_raw
 from muse_web_cli.model import Snapshot, tab_selector, url_is_login
-from muse_web_cli.nav import guard_click, read_memory_flow, read_with_tab
+from muse_web_cli.nav import guard_click, read_chats_flow, read_memory_flow, read_with_tab
 from muse_web_cli.output import safe_text
-from muse_web_cli.probes import MEMORY_JS, OBSERVER_JS, PANEL_JS, PANEL_STATE_JS, SNAPSHOT_JS
+from muse_web_cli.probes import CHATS_JS, MEMORY_JS, OBSERVER_JS, PANEL_JS, PANEL_STATE_JS, SNAPSHOT_JS
 from muse_web_cli.selectors import (
     AVATAR_BUTTON,
     COMPOSER,
@@ -23,6 +23,8 @@ from muse_web_cli.selectors import (
     MEMORY_FILE,
     MUSE_URL,
     SEND_BUTTON,
+    SIDE_CHATS_CONTENT,
+    SWITCHER,
     TAB_ACTIVITY,
     TAB_IDENTITY,
     TAB_PENDING,
@@ -33,6 +35,7 @@ _TAB_CLICKS = frozenset({TAB_PENDING, TAB_UPCOMING, TAB_ACTIVITY, TAB_IDENTITY})
 
 _CLICK_NAME = {
     COMPOSER: "composer",
+    SWITCHER: "switcher",
     TAB_PENDING: "pending_tab",
     TAB_UPCOMING: "upcoming_tab",
     TAB_ACTIVITY: "activity_tab",
@@ -189,6 +192,31 @@ class CdpPage:
             click=self.click,
             read=read,
             target=target,
+        )
+
+    def _side_chats_open(self) -> bool:
+        return self.page.locator(SIDE_CHATS_CONTENT).count() > 0
+
+    def read_chats(self) -> dict:
+        def open_panel() -> None:
+            self.click(SWITCHER)
+            self._wait_until(self._side_chats_open, "side_chats")
+
+        def close_panel() -> None:
+            self.page.keyboard.press("Escape")
+            self._wait_until(lambda: not self._side_chats_open(), "side_chats_close")
+
+        def read() -> dict:
+            data = self._eval(CHATS_JS)
+            if not isinstance(data, dict) or not data.get("ok"):
+                raise PageChanged("side_chats")
+            return data
+
+        return read_chats_flow(
+            is_open=self._side_chats_open,
+            open_panel=open_panel,
+            close_panel=close_panel,
+            read=read,
         )
 
     def read_memory(self) -> str:

@@ -13,8 +13,10 @@ from muse_web_cli.model import (
     Snapshot,
     assess,
     browser_down,
+    chats_payload,
     empty_like,
     memory_payload,
+    shape_chats,
     messages_payload,
     pending_payload,
     reply_text,
@@ -24,7 +26,7 @@ from muse_web_cli.model import (
     missing_keys,
     _status,
 )
-from muse_web_cli.nav import read_memory_flow, read_with_tab
+from muse_web_cli.nav import read_chats_flow, read_memory_flow, read_with_tab
 from muse_web_cli.selectors import TAB_ACTIVITY, TAB_IDENTITY, TAB_PENDING, TAB_UPCOMING
 
 
@@ -224,6 +226,19 @@ def collect_activity(driver) -> dict:
     return grouped_payload(shaped, backend="browser")
 
 
+def collect_chats(driver) -> dict:
+    snap = driver.snapshot()
+    status = assess(snap)
+    if status["state"] != "ok":
+        return empty_like("chats", status)
+    try:
+        raw = driver.read_chats()
+    except PageChanged as exc:
+        return _page_error("chats", exc.missing)
+    chats = shape_chats(raw.get("mainSpans"), raw.get("rows"))
+    return chats_payload(chats, backend="browser")
+
+
 def collect_memory(driver) -> dict:
     snap = driver.snapshot()
     status = assess(snap)
@@ -276,6 +291,7 @@ def message_from_raw(raw: dict) -> Message:
 __all__ = [
     "BrowserDown",
     "collect_activity",
+    "collect_chats",
     "collect_memory",
     "collect_messages",
     "collect_pending",

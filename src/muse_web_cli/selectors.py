@@ -39,6 +39,11 @@ COPY_REPLY = (
 
 SWITCHER = '[data-testid="hatch-chat-switcher-trigger"]'
 SIDE_CHATS = '[data-testid="hatch-side-chats-panel-shell"]'
+SIDE_CHATS_CONTENT = '[data-testid="hatch-side-chats-panel-content"]'
+# Labels on the switcher and the empty side-chat state. They are not chat titles.
+CHAT_CHROME = ("聊天室", "Chat", "Chats")
+NEW_SIDE_CHAT = ("新副聊天室", "New side chat")
+EMPTY_SIDE_CHAT = ("開始副聊天室", "Start a side chat")
 
 # --- right status panel -----------------------------------------------------
 
@@ -105,11 +110,12 @@ OPTIONAL_SELECTORS = {
 }
 
 # Clicks are an allowlist (see nav.ALLOWED_CLICKS). These stay listed so a
-# reviewer can see the controls the tool must not operate.
+# reviewer can see the controls the tool must not operate. The switcher trigger
+# is not in this list: chats opens it, reads the list, and closes it. Rows and
+# the new-side-chat control stay unclicked.
 FORBIDDEN_TESTIDS = (
     "hatch-dock-more",
     "hatch-invite-friends-button",
-    "hatch-chat-switcher-trigger",
     "hatch-file-editor-maximize",
     "hatch-file-editor-more-actions",
 )

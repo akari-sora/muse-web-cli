@@ -8,10 +8,13 @@ from muse_web_cli.selectors import (
     API_HINT,
     API_UNAVAILABLE,
     BOT_PHRASES,
+    CHAT_CHROME,
     CREDENTIAL_HINT,
+    EMPTY_SIDE_CHAT,
     KEY_SELECTORS,
     LOGIN_HINT,
     MEMORY_SECTIONS,
+    NEW_SIDE_CHAT,
     PANEL_TAB_SELECTORS,
     REGION_PHRASES,
     START_HINT,
@@ -280,6 +283,44 @@ def send_payload(
     }
 
 
+_CHAT_SKIP = frozenset((*CHAT_CHROME, *NEW_SIDE_CHAT, *EMPTY_SIDE_CHAT))
+
+
+def shape_chats(main_spans: list[str] | None, rows: list[dict] | None) -> list[dict]:
+    """Main chat first, then side chats. Empty-state copy and the new-chat control are not chats."""
+    spans = [str(item or "").strip() for item in (main_spans or []) if str(item or "").strip()]
+    titled = [item for item in spans if item not in _CHAT_SKIP]
+    main_title = max(titled, key=len) if titled else "聊天室"
+    sides: list[dict] = []
+    for row in rows or []:
+        if row.get("options"):
+            continue
+        title = str(row.get("title") or "").strip()
+        if not title or title in _CHAT_SKIP:
+            continue
+        sides.append(
+            {
+                "title": title,
+                "is_current": bool(row.get("current")),
+                "kind": "side",
+            }
+        )
+    current_side = any(item["is_current"] for item in sides)
+    return [{"title": main_title, "is_current": not current_side, "kind": "main"}, *sides]
+
+
+def chats_payload(chats: list[dict] | None, *, backend: str, state: str = "ok", error=None, hint=None) -> dict:
+    rows = chats or []
+    return {
+        "backend": backend,
+        "state": state,
+        "count": len(rows) if state == "ok" else 0,
+        "chats": rows if state == "ok" else [],
+        "error": error,
+        "hint": hint,
+    }
+
+
 def pending_payload(items: list[dict] | None, *, backend: str, state: str = "ok", error=None, hint=None) -> dict:
     rows = items or []
     return {
@@ -348,6 +389,8 @@ def unsupported(kind: str, *, backend: str = "api", text: str = "") -> dict:
         return grouped_payload([], backend=backend, state="unsupported", error=error, hint=hint)
     if kind == "memory":
         return memory_payload("", backend=backend, state="unsupported", error=error, hint=hint)
+    if kind == "chats":
+        return chats_payload([], backend=backend, state="unsupported", error=error, hint=hint)
     raise KeyError(kind)
 
 
@@ -399,4 +442,6 @@ def empty_like(kind: str, status: dict) -> dict:
         return grouped_payload([], backend=backend, state=state, error=error, hint=hint)
     if kind == "memory":
         return memory_payload("", backend=backend, state=state, error=error, hint=hint)
+    if kind == "chats":
+        return chats_payload([], backend=backend, state=state, error=error, hint=hint)
     raise KeyError(kind)

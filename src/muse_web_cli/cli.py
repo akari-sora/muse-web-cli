@@ -31,7 +31,7 @@ from muse_web_cli.errors import BrowserDown
 from muse_web_cli.model import assess, browser_down, empty_like, exit_for, send_payload
 from muse_web_cli.output import emit, safe_text
 
-CAPABILITIES = ("status", "messages", "send", "pending", "upcoming", "activity", "memory")
+CAPABILITIES = ("status", "messages", "send", "pending", "upcoming", "activity", "memory", "chats")
 LIMIT_MAX = 100
 
 
@@ -65,6 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("upcoming", help="read the upcoming tab")
     sub.add_parser("activity", help="read the activity tab")
     sub.add_parser("memory", help="read MEMORY.md innerText; does not focus or edit it")
+    sub.add_parser("chats", help="list the main chat and side chats; does not open or create one")
     sub.add_parser("login", help="open a headed Muse window and wait for you to log in")
     start = sub.add_parser("start", help="start the dedicated Chrome if it is not already running")
     start.add_argument("--headed", action="store_true", help="show the window")

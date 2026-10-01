@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1] - 2026-10-01
+
+- Add a read-only `chats` command that lists the main chat and any side chats.
+- Opening the switcher does not create a side chat and does not open one. The previous view is restored.
+- The api backend returns `unsupported` for `chats`.
+
 ## [0.1.0] - 2026-10-01
 
 - Drive a logged-in Muse web session from the terminal through a dedicated Chrome profile, headed or headless.

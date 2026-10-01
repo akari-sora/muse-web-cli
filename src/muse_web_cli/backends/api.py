@@ -68,3 +68,6 @@ class ApiBackend:
 
     def memory(self) -> dict:
         return self._blocked("memory") or unsupported("memory")
+
+    def chats(self) -> dict:
+        return self._blocked("chats") or unsupported("chats")

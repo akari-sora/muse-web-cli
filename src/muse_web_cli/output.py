@@ -82,6 +82,12 @@ def human(payload: dict) -> str:
                         f"- {item.get('title') or ''} | {item.get('detail') or ''} | {item.get('time') or ''}"
                     )
         return "\n".join(lines)
+    if "chats" in payload and "count" in payload:
+        lines = [f"count={payload.get('count')}"]
+        for chat in payload.get("chats") or []:
+            mark = " current" if chat.get("is_current") else ""
+            lines.append(f"- {chat.get('kind')}{mark}: {chat.get('title') or ''}")
+        return "\n".join(lines)
     if "items" in payload and "count" in payload:
         lines = [f"count={payload.get('count')}"]
         for item in payload.get("items") or []:

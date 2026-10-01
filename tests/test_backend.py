@@ -75,6 +75,7 @@ def test_api_refuses_loose_permissions_and_never_reads(tmp_path, monkeypatch):
         backend.upcoming(),
         backend.activity(),
         backend.memory(),
+        backend.chats(),
     ]
     blob = json.dumps(payloads)
     assert CANARY not in blob
@@ -99,6 +100,8 @@ def test_api_shapes_match_browser_shapes():
     }
     assert unsupported("pending")["items"] == []
     assert unsupported("activity")["groups"] == []
+    assert unsupported("chats")["chats"] == []
+    assert exit_for("unsupported") == 4
     assert API_UNAVAILABLE == SELECTOR_TEXT
 
 
@@ -128,4 +131,4 @@ def test_cli_help_and_limit(tmp_path, capsys):
 
 def test_cli_version(tmp_path, capsys):
     assert main(["--version"], home=tmp_path) == 0
-    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.0"
+    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.1"

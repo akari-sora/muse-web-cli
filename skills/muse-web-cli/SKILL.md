@@ -3,9 +3,9 @@ name: muse-web-cli
 description: >-
   Drive the user's own logged-in Meta Muse web app (muse.ai) with the
   muse-web-cli command, headed or headless. Use when the user asks to check
-  Muse, read Muse messages, send a message to Muse, or look at Muse pending
+  Muse, read Muse messages, list Muse chats, send a message to Muse, or look at Muse pending
   approvals, upcoming items, activity, or memory. 用 muse-web-cli 操作使用者自己已登入的
-  Meta Muse：當使用者要查看 Muse、讀 Muse 訊息、傳訊息給 Muse，或查看核可、近期、動態、記憶時使用。
+  Meta Muse：當使用者要查看 Muse、讀 Muse 訊息、列出聊天室、傳訊息給 Muse，或查看核可、近期、動態、記憶時使用。
   The command is muse-web-cli, never muse. 指令是 muse-web-cli，不是 muse。
 ---
 
@@ -21,7 +21,7 @@ description: >-
 2. 結束碼 2 且 `state` 是 `browser_down`：再跑一次並保留 `--autostart`。若是 `session_expired`，請使用者執行 `muse-web-cli login`（一定是有視窗的）。無頭模式碰到人機驗證時也是這條。工具不會輸入帳號密碼。
 3. 結束碼 3 且 `state` 是 `ui_changed`：頁面結構變了，不要亂點，把 `missing` 裡的名稱告訴使用者。
 4. 使用者要看訊息才跑 `messages`。要傳訊息才跑 `send`。傳的時候加 `--wait`，逾時不要再送一次。
-5. `pending`、`upcoming`、`activity`、`memory` 都是唯讀。
+5. `pending`、`upcoming`、`activity`、`memory`、`chats` 都是唯讀。`chats` 只列出主聊天室和副聊天室，不開新副聊天室，也不會切換聊天。
 
 ## 指令
 
@@ -30,7 +30,7 @@ description: >-
 - `status` — 工作階段、待核可數量、最新助理訊息是不是卡片
 - `messages --limit N` — 由舊到新，上限 100
 - `send --wait --timeout 120 -- TEXT` — insertText 與 Enter，只送一次
-- `pending` / `upcoming` / `activity` / `memory`
+- `pending` / `upcoming` / `activity` / `memory` / `chats`
 - `login` / `start` / `start --headed` / `stop` / `selftest`
 
 `start` 預設無頭。設定檔已有 Chrome 時直接接上，不開第二個。`stop` 只關這個工具自己啟動的進程。

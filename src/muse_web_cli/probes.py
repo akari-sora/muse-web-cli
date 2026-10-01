@@ -10,6 +10,7 @@ _MAP = {
     "log": sel.LOG,
     "composer": sel.COMPOSER,
     "switcher": sel.SWITCHER,
+    "sideContent": sel.SIDE_CHATS_CONTENT,
     "avatar": sel.AVATAR_BUTTON,
     "pending_tab": sel.TAB_PENDING,
     "upcoming_tab": sel.TAB_UPCOMING,
@@ -266,6 +267,30 @@ PANEL_STATE_JS = f"""
   if (!card || !shown(card)) return {{open: false, label: null}};
   const pressed = [...card.querySelectorAll("button[aria-pressed='true']")].find(shown);
   return {{open: true, label: pressed ? pressed.getAttribute("aria-label") : null}};
+}}
+"""
+
+CHATS_JS = f"""
+() => {{
+  const sel = {_arg()};
+  const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
+  const trigger = document.querySelector(sel.switcher);
+  const mainSpans = trigger
+    ? [...trigger.querySelectorAll("span")].map((el) => norm(el.innerText)).filter(Boolean)
+    : [];
+  const content = document.querySelector(sel.sideContent);
+  if (!content) return {{ok: false, mainSpans, rows: []}};
+  const rows = [];
+  for (const row of content.querySelectorAll("button, a, [role='option']")) {{
+    if (row.querySelector("input")) continue;
+    const aria = row.getAttribute("aria-label") || "";
+    rows.push({{
+      title: norm(row.innerText),
+      current: row.getAttribute("aria-current") === "true" || row.getAttribute("aria-selected") === "true" || row.getAttribute("aria-pressed") === "true",
+      options: row.getAttribute("data-testid") === "hatch-side-chats-options" || aria === "副聊天室選項" || aria === "Side chat options",
+    }});
+  }}
+  return {{ok: true, mainSpans, rows}};
 }}
 """
 
