@@ -86,7 +86,9 @@ def human(payload: dict) -> str:
         lines = [f"count={payload.get('count')}"]
         for chat in payload.get("chats") or []:
             mark = " current" if chat.get("is_current") else ""
-            lines.append(f"- {chat.get('kind')}{mark}: {chat.get('title') or ''}")
+            session_id = chat.get("session_id")
+            suffix = f" id={session_id}" if session_id else ""
+            lines.append(f"- {chat.get('kind')}{mark}: {chat.get('title') or ''}{suffix}")
         return "\n".join(lines)
     if "items" in payload and "count" in payload:
         lines = [f"count={payload.get('count')}"]

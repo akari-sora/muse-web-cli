@@ -52,7 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
             "Exit 0 ok.\n"
             "Exit 2 setup: browser_down, session_expired, region_blocked, profile_busy, credential_permissions.\n"
             "Exit 3 page: ui_changed, timeout.\n"
-            "Exit 4 unsupported."
+            "Exit 4 unsupported: the credential file is missing, or base_url / vm_id / endpoints is empty.\n"
+            "Point --backend api at ~/.trinity-cli/muse-credential (mode 600) with base_url, auth.type, auth.token, vm_id."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -83,8 +84,10 @@ def build_parser() -> argparse.ArgumentParser:
         default=20,
         help="how many messages to return (default: 20, minimum 1, values above 100 are capped at 100)",
     )
+    messages.add_argument("--session", help="side-chat session id for --backend api; omit to use the switched chat")
     send = sub.add_parser("send", help="type with insertText and press Enter once")
     send.add_argument("text", help="message text; put -- before it if it starts with a dash")
+    send.add_argument("--session", help="side-chat session id for --backend api; omit to use the switched chat")
     send.add_argument("--wait", action="store_true", help="wait for the assistant reply (default: off)")
     send.add_argument(
         "--timeout",
@@ -96,7 +99,12 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("upcoming", help="read the upcoming tab; does not click a row")
     sub.add_parser("activity", help="read the activity tab; does not click a row")
     sub.add_parser("memory", help="read MEMORY.md innerText; does not focus or edit it")
-    sub.add_parser("chats", help="list the main chat and side chats; does not open or create one")
+    chats = sub.add_parser("chats", help="list chats; with --backend api, create, rename, delete, or switch")
+    chats.add_argument("--create", action="store_true", help="create a chat on the api backend")
+    chats.add_argument("--rename", metavar="SESSION", help="rename a chat on the api backend")
+    chats.add_argument("--delete", metavar="SESSION", help="delete a chat on the api backend")
+    chats.add_argument("--switch", metavar="SESSION", help="switch chat on the api backend; use main for the primary chat")
+    chats.add_argument("--title", help="title for --create or --rename")
     sub.add_parser("login", help="open a headed window so you can log in; never types credentials")
     start = sub.add_parser("start", help="start dedicated Chrome, or attach if that profile is already running")
     start.add_argument("--headed", action="store_true", help="show the window (default: headless)")
@@ -246,16 +254,44 @@ def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text
         page.disconnect()
 
 
+def _chat_mutation(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:
+    if args.command != "chats":
+        return None, None, None
+    chosen = [name for name in ("create", "rename", "delete", "switch") if getattr(args, name, None)]
+    if len(chosen) > 1:
+        raise ConfigError("chats 一次只做一件事：--create、--rename、--delete 或 --switch。")
+    if not chosen:
+        return None, None, None
+    name = chosen[0]
+    if name == "rename" and not args.title:
+        raise ConfigError("請加上 --title。")
+    if name == "create":
+        return "create", None, args.title
+    if name == "rename":
+        return "rename", args.rename, args.title
+    if name == "delete":
+        return "delete", args.delete, None
+    return "switch", args.switch, None
+
+
 def _run_capability(settings: Settings, command: str, args: argparse.Namespace) -> dict:
+    action, session, title = _chat_mutation(args)
     if settings.backend == "api":
         backend = ApiBackend(settings.paths.credential)
         if command == "status":
             return backend.status()
         if command == "messages":
-            return backend.messages(args.limit)
+            return backend.messages(args.limit, session=args.session)
         if command == "send":
-            return backend.send(args.text, wait=args.wait, timeout=args.timeout)
+            return backend.send(args.text, wait=args.wait, timeout=args.timeout, session=args.session)
+        if command == "chats":
+            return backend.chats(action=action, session=session, title=title)
         return getattr(backend, command)()
+    if action:
+        raise ConfigError(
+            "瀏覽器後端只讀聊天列表。建、改、刪、切換請加 --backend api，"
+            "並在 ~/.trinity-cli/muse-credential 填 base_url、auth.token、vm_id。"
+        )
 
     def run(page, ready):
         backend = BrowserBackend(page, headless=ready.get("headless"))

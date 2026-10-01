@@ -1,8 +1,8 @@
-"""Generic REST client for a user-supplied sanctioned API.
+"""API backend.
 
-There is no official public Muse API. This module never writes the credential
-file, never reads the browser, and never prints the token. It only calls the
-method and path the user configured.
+With vm_id, calls go through the Muse gateway. Without it, endpoints select a
+REST path the user configured. This module never writes the credential file,
+never reads the browser, and never prints the token.
 """
 
 from __future__ import annotations
@@ -100,10 +100,57 @@ def _endpoint(value: object) -> dict | None:
     return {"method": method, "path": path}
 
 
+def _timeout(data: dict) -> float:
+    timeout = data.get("timeout_s", 30)
+    try:
+        timeout_s = float(timeout)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("timeout_s") from exc
+    if timeout_s <= 0:
+        raise ValueError("timeout_s")
+    return timeout_s
+
+
+def _load_muse(data: dict, vm_id: str) -> dict:
+    base = data.get("base_url")
+    if not isinstance(base, str):
+        raise ValueError("base_url")
+    parts = urlsplit(base.strip())
+    if parts.scheme not in {"https", "http", "wss", "ws"} or not parts.hostname or parts.username or parts.password:
+        raise ValueError("base_url")
+    auth = data.get("auth")
+    if not isinstance(auth, dict):
+        raise ValueError("auth")
+    token = auth.get("token")
+    if not isinstance(token, str) or not token:
+        raise ValueError("auth.token")
+    kind = str(auth.get("type") or "bearer")
+    if kind not in {"bearer", "header"}:
+        raise ValueError("auth.type")
+    app_id = data.get("app_id") or "hatch-web"
+    if not isinstance(app_id, str) or not app_id.strip():
+        raise ValueError("app_id")
+    notary = data.get("notary_token")
+    if notary is not None and not isinstance(notary, str):
+        raise ValueError("notary_token")
+    return {
+        "mode": "muse",
+        "base_url": base.strip().rstrip("/"),
+        "vm_id": vm_id,
+        "token": token,
+        "app_id": app_id.strip(),
+        "notary_token": notary or None,
+        "timeout_s": _timeout(data),
+    }
+
+
 def _load_config(text: str) -> dict:
     data = json.loads(text)
     if not isinstance(data, dict):
         raise ValueError("object")
+    vm_id = data.get("vm_id")
+    if isinstance(vm_id, str) and vm_id.strip():
+        return _load_muse(data, vm_id.strip())
     base = data.get("base_url")
     if not isinstance(base, str):
         raise ValueError("base_url")
@@ -120,18 +167,12 @@ def _load_config(text: str) -> dict:
         spec = _endpoint(raw_endpoints.get(kind))
         if spec:
             endpoints[kind] = spec
-    timeout = data.get("timeout_s", 30)
-    try:
-        timeout_s = float(timeout)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("timeout_s") from exc
-    if timeout_s <= 0:
-        raise ValueError("timeout_s")
     return {
+        "mode": "rest",
         "base_url": base.rstrip("/"),
         "headers": headers,
         "endpoints": endpoints,
-        "timeout_s": timeout_s,
+        "timeout_s": _timeout(data),
     }
 
 
@@ -156,14 +197,16 @@ def _reply_after(payload: dict, text: str) -> str | None:
 
 
 class ApiBackend:
-    def __init__(self, credential: Path, *, transport=None, platform: str | None = None, home: Path | None = None, sleep=None):
+    def __init__(self, credential: Path, *, transport=None, platform: str | None = None, home: Path | None = None, sleep=None, gateway_session=None):
         self.credential = credential
         self.transport = transport or urllib_transport
         self.platform = platform
         self.home = home or Path.home()
         self.sleep = sleep or time.sleep
+        self.gateway_session = gateway_session
         self._config: dict | None = None
         self._config_error: dict | None = None
+        self._gateway = None
 
     def _gate(self) -> dict | None:
         try:
@@ -195,7 +238,7 @@ class ApiBackend:
         except (OSError, json.JSONDecodeError, ValueError):
             self._config_error = unsupported(
                 "status",
-                error="credential file is not a sanctioned JSON config",
+                error="憑證不是可用的 JSON。請填 base_url、auth.type、auth.token，以及 vm_id 或 endpoints。",
                 hint=API_HINT,
             )
             return self._config_error
@@ -217,7 +260,7 @@ class ApiBackend:
     def _missing(self, kind: str, text: str = "") -> dict:
         return self._shape(
             kind,
-            unsupported(kind, error=f"api backend: no endpoint configured for {kind}", hint=API_HINT, text=text),
+            unsupported(kind, error=f"端點沒填（{kind}）。請在 endpoints 指定，或改填 vm_id。", hint=API_HINT, text=text),
             text,
         )
 
@@ -331,13 +374,45 @@ class ApiBackend:
         payload["count"] = len(chats)
         return {key: payload.get(key) for key in ("backend", "state", "count", "chats", "error", "hint")}
 
+    def _muse(self, kind: str, text: str = ""):
+        blocked = self._prepare()
+        if blocked is not None:
+            return self._shape(kind, blocked, text)
+        if (self._config or {}).get("mode") != "muse":
+            return None
+        if self._gateway is None:
+            from muse_web_cli.backends.gateway import MuseGateway
+
+            self._gateway = MuseGateway(
+                self._config,
+                credential=self.credential,
+                session=self.gateway_session,
+                sleep=self.sleep,
+            )
+        return self._gateway
+
     def status(self) -> dict:
+        gateway = self._muse("status")
+        if gateway is not None:
+            if isinstance(gateway, dict):
+                return gateway
+            return gateway.status()
         return self._run("status")
 
-    def messages(self, limit: int) -> dict:
+    def messages(self, limit: int, *, session: str | None = None) -> dict:
+        gateway = self._muse("messages")
+        if gateway is not None:
+            if isinstance(gateway, dict):
+                return gateway
+            return gateway.messages(limit, session=session)
         return self._run("messages", query={"limit": limit})
 
-    def send(self, text: str, *, wait: bool, timeout: float) -> dict:
+    def send(self, text: str, *, wait: bool, timeout: float, session: str | None = None) -> dict:
+        gateway = self._muse("send", text)
+        if gateway is not None:
+            if isinstance(gateway, dict):
+                return gateway
+            return gateway.send(text, wait=wait, timeout=timeout, session=session)
         started = time.monotonic()
         first = self._run("send", text=text, body={"text": text, "wait": bool(wait)}, timeout=timeout)
         if not wait or first.get("state") != "ok" or first.get("reply"):
@@ -366,16 +441,34 @@ class ApiBackend:
         return first
 
     def pending(self) -> dict:
+        gateway = self._muse("pending")
+        if gateway is not None:
+            return gateway if isinstance(gateway, dict) else gateway.pending()
         return self._run("pending")
 
     def upcoming(self) -> dict:
+        gateway = self._muse("upcoming")
+        if gateway is not None:
+            return gateway if isinstance(gateway, dict) else gateway.upcoming()
         return self._run("upcoming")
 
     def activity(self) -> dict:
+        gateway = self._muse("activity")
+        if gateway is not None:
+            return gateway if isinstance(gateway, dict) else gateway.activity()
         return self._run("activity")
 
     def memory(self) -> dict:
+        gateway = self._muse("memory")
+        if gateway is not None:
+            return gateway if isinstance(gateway, dict) else gateway.memory()
         return self._run("memory")
 
-    def chats(self) -> dict:
-        return self._run("chats")
+    def chats(self, *, action: str | None = None, session: str | None = None, title: str | None = None) -> dict:
+        gateway = self._muse("chats")
+        if gateway is not None:
+            if isinstance(gateway, dict):
+                return gateway
+            return gateway.chats(action=action, session=session, title=title)
+        body = {"action": action, "session": session, "title": title} if action else None
+        return self._run("chats", body=body)

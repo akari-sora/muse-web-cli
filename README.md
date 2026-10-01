@@ -171,14 +171,14 @@ muse-web-cli --json pending
 | 2 | `credential_permissions` | macOS／Linux：`chmod 600 ~/.trinity-cli/muse-credential`。Windows：檔案必須在使用者主目錄裡，而且是一般檔案 |
 | 3 | `ui_changed` | 跑 `selftest`，看 `missing`。不要在頁面上亂點 |
 | 3 | `timeout` | `hint` 是 `nothing was sent again`。不要自動再送一次 |
-| 4 | `unsupported` | 這個能力沒有設定 sanctioned 端點。改用 `--backend browser` |
+| 4 | `unsupported` | 憑證檔不存在，或 `base_url`／`vm_id`／`endpoints` 沒填。不是「這個功能沒做」 |
 
 ### 後端
 
 JSON 形狀和結束碼不因後端而改變。呼叫端不要自己分支。預設是 `browser`。選擇方式：`--backend`、`MUSE_WEB_BACKEND`、或設定檔的 `backend`。優先順序與上面相同。
 
-- `browser`：有視窗或無頭，透過 CDP 操作頁面。這是唯一真正連到 Muse 的後端。
-- `api`：給使用者自己放進去的合法端點用的通用客戶端。**今天沒有官方公開的 Muse API**，所以在你寫好憑證檔之前，這個後端不會打到 Muse。工具不會從瀏覽器取出 cookie 或 token，也不會把 token 寫進檔案。
+- `browser`：有視窗或無頭，透過 CDP 操作頁面。預設是這個。
+- `api`：憑證有 `vm_id` 時，走已經開啟的 Muse gateway（狀態、訊息、送訊、核可、排程、動態、記憶、聊天室的列表與建改刪切換）。沒有 `vm_id` 時，仍可用 `endpoints` 指到你自己的 REST。工具不會從瀏覽器取出 cookie 或 token，也不會把 token 寫進檔案。
 
 憑證檔由你自己建立：`~/.trinity-cli/muse-credential`。macOS 與 Linux 權限必須正好是 `600`。Windows 不檢查 Unix 權限，但檔案必須在使用者主目錄裡。範例（token 是假的）：
 
@@ -200,7 +200,18 @@ JSON 形狀和結束碼不因後端而改變。呼叫端不要自己分支。預
 }
 ```
 
-`auth.type` 也可以是 `header`，那時用 `header_name`。檔案不存在，或某個能力沒有端點：該能力結束碼 4。401／403 是 `session_expired`（結束碼 2）。其它 4xx 與 5xx 是 `ui_changed`（結束碼 3）。逾時是 `timeout`（結束碼 3），`send` 不會再送一次。`send --wait` 若回應沒有 `reply`，只會再讀 `messages`，不會重送。
+`auth.type` 也可以是 `header`，那時用 `header_name`。指到 Muse gateway 時改放 `vm_id`（token 請自己換掉）：
+
+```json
+{
+  "base_url": "https://hatch.metaaivm.com",
+  "vm_id": "your-vm-id",
+  "auth": {"type": "bearer", "token": "replace-me"},
+  "timeout_s": 30
+}
+```
+
+檔案不存在，或 `vm_id` 與 `endpoints` 都沒填：結束碼 4。401／403 是 `session_expired`（結束碼 2），下一步是換掉 `auth.token`。其它 4xx 與 5xx 是 `ui_changed`（結束碼 3）。逾時是 `timeout`（結束碼 3），`send` 不會再送一次。`send --wait` 若回應沒有 `reply`，只會再讀 `messages`，不會重送。`chats --create`、`--rename`、`--delete`、`--switch` 只在 `--backend api` 送出請求。瀏覽器後端維持只讀列表。
 
 `start` / `stop` / `login` / `selftest` 永遠管本地 Chrome，不走 api。
 
@@ -393,14 +404,14 @@ Global flags may appear before or after the command:
 | 2 | `credential_permissions` | macOS/Linux: `chmod 600 ~/.trinity-cli/muse-credential`. Windows: the file must be a regular file under your home directory |
 | 3 | `ui_changed` | Run `selftest` and read `missing`. Do not click around the page |
 | 3 | `timeout` | `hint` is `nothing was sent again`. Do not send again automatically |
-| 4 | `unsupported` | That capability has no sanctioned endpoint. Use `--backend browser` |
+| 4 | `unsupported` | The credential file is missing, or `base_url` / `vm_id` / `endpoints` is empty. Not an unimplemented command |
 
 ### Backends
 
 JSON shapes and exit codes do not depend on the backend. Callers should not branch. The default is `browser`. Select it with `--backend`, `MUSE_WEB_BACKEND`, or the config key `backend`. Precedence is the same as above.
 
-- `browser`: headed or headless, over CDP. This is the only backend that actually talks to Muse.
-- `api`: a generic client for an endpoint you are allowed to use and that you configure yourself. **There is no official public Muse API today**, so this backend does nothing to Muse until you write the credential file. The tool never extracts cookies or tokens from the browser, and it never writes a token into the file.
+- `browser`: headed or headless, over CDP. This is the default.
+- `api`: with `vm_id`, this talks to the open Muse gateway (status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch). Without `vm_id`, `endpoints` still selects a REST path you configure. The tool never extracts cookies or tokens from the browser, and it never writes a token into the file.
 
 You create `~/.trinity-cli/muse-credential` yourself. On macOS and Linux the mode must be exactly `600`. On Windows the Unix mode is not checked, but the file must be under your home directory. Example (the token is fake):
 
@@ -422,7 +433,7 @@ You create `~/.trinity-cli/muse-credential` yourself. On macOS and Linux the mod
 }
 ```
 
-`auth.type` may also be `header`, which uses `header_name`. A missing file, or a capability with no endpoint, is exit 4 for that capability. HTTP 401/403 is `session_expired` (exit 2). Other 4xx and 5xx are `ui_changed` (exit 3). A timeout is `timeout` (exit 3), and `send` is not repeated. If `send --wait` gets no `reply`, the client only reads `messages`. It does not post again.
+`auth.type` may also be `header`, which uses `header_name`. To use the Muse gateway, set `vm_id` and `base_url` to `https://hatch.metaaivm.com` instead of `endpoints`. A missing file, or neither `vm_id` nor `endpoints`, is exit 4. HTTP 401/403 is `session_expired` (exit 2); replace `auth.token`. Other 4xx and 5xx are `ui_changed` (exit 3). A timeout is `timeout` (exit 3), and `send` is not repeated. If `send --wait` gets no `reply`, the client only reads `messages`. It does not post again. `chats --create`, `--rename`, `--delete`, and `--switch` send those requests only with `--backend api`.
 
 `start`, `stop`, `login`, and `selftest` always manage the local Chrome. They are not the api seam.
 

@@ -46,7 +46,8 @@ def test_backend_precedence(tmp_path):
 def test_api_missing_file_is_unsupported(tmp_path):
     payload = ApiBackend(tmp_path / "muse-credential").status()
     assert payload["state"] == "unsupported"
-    assert "no official Muse API" in payload["error"]
+    assert "muse-credential" in payload["error"]
+    assert "vm_id" in payload["error"]
     assert exit_for(payload["state"]) == 4
     assert CANARY not in json.dumps(payload)
 
@@ -77,7 +78,8 @@ def test_api_refuses_loose_permissions_and_never_reads(tmp_path):
     blob = json.dumps(payloads)
     assert CANARY not in blob
     assert all(item["state"] == "unsupported" for item in payloads)
-    assert "no endpoint configured for status" in payloads[0]["error"]
+    assert "端點沒填（status）" in payloads[0]["error"]
+    assert "vm_id" in payloads[0]["error"]
     assert payloads[2]["sent"] is False
 
 
