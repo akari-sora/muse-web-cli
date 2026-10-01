@@ -248,6 +248,8 @@ muse-web-cli credential
 - grok-bot-cli（fork，`gbot`）— Grok Bot：<https://gitlab.com/aa22396584/grok-bot-cli>（鏡像 <https://github.com/ImL1s/grok-bot-cli>）
 - muse-web-cli — 透過網頁操作 Meta Muse（這個 repo）：<https://gitlab.com/aa22396584/muse-web-cli>
 
+CI 預設使用 GitLab.com 的 runner。維護者可設定 CI/CD 變數 `LINUX_RUNNER_TAG` 與 `WINDOWS_RUNNER_TAG`，把 job 指到自己的 runner。
+
 MIT，見 [LICENSE](LICENSE)。Copyright (c) 2026 ImL1s。本機測試：`uv run --group dev pytest`。
 
 ## English
@@ -480,5 +482,7 @@ Do not branch on backend. Pass `--json --autostart`. Project: <https://gitlab.co
 - chatgpt-dot-cli — ChatGPT Your dot: <https://gitlab.com/aa22396584/chatgpt-dot-cli>
 - grok-bot-cli (fork, `gbot`) — Grok Bot: <https://gitlab.com/aa22396584/grok-bot-cli> (mirror <https://github.com/ImL1s/grok-bot-cli>)
 - muse-web-cli — Meta Muse via the web (this repo): <https://gitlab.com/aa22396584/muse-web-cli>
+
+CI uses GitLab.com runners by default. Maintainers can point jobs at their own runners by setting the CI/CD variables `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG`.
 
 MIT. See [LICENSE](LICENSE). Copyright (c) 2026 ImL1s. Local tests: `uv run --group dev pytest`.
