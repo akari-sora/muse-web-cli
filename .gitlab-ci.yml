@@ -33,18 +33,43 @@ test:
     - pip install "pytest>=8"
     - python -m pytest -q
 
-# Hosted Windows spends shared minutes. Always on tags, merge requests, and
-# manual web runs. On main, only when shipped code, tests, or packaging change.
-# A commit that only touches this file still runs Linux and skips Windows.
-test-windows:
-  stage: test
-  tags: [saas-windows-medium-amd64]
+# Self-hosted Windows. Tags, manual web runs, and main pushes that change
+# shipped code, tests, or packaging. A CI-only push still runs Linux only.
+# Merge requests are manual: that runner accepts protected refs only, so an
+# unprotected source branch must not block the pipeline.
+.windows_python: &windows_python
   interruptible: true
   timeout: 20m
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    UV_CACHE_DIR: "$CI_PROJECT_DIR/.cache/uv"
+  cache:
+    key: uv-win
+    paths:
+      - .cache/uv
+  script:
+    - |
+      $ErrorActionPreference = "Stop"
+      $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
+      $env:UV_CACHE_DIR = Join-Path $env:CI_PROJECT_DIR ".cache/uv"
+      if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
+        $env:UV_INSTALL_DIR = Join-Path $env:CI_PROJECT_DIR ".uv"
+        irm https://astral.sh/uv/install.ps1 | iex
+        $env:Path = "$env:UV_INSTALL_DIR;$env:Path"
+      }
+      uv python install 3.12
+      uv run --python 3.12 --group dev pytest -q
+
+test-windows:
+  <<: *windows_python
+  stage: test
+  tags: [windows, hx370]
   needs:
     - job: test
   rules:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+      allow_failure: true
     - if: $CI_COMMIT_TAG
     - if: $CI_PIPELINE_SOURCE == "web"
     - if: $CI_COMMIT_BRANCH == "main"
@@ -53,18 +78,29 @@ test-windows:
         - tests/**/*
         - pyproject.toml
         - uv.lock
-  variables:
-    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
-    UV_CACHE_DIR: "$CI_PROJECT_DIR\\.uv-cache"
-  cache:
-    key: uv-windows
-    paths:
-      - .uv-cache
-  script:
-    - iex (irm https://astral.sh/uv/install.ps1)
-    - $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
-    - uv python install 3.12
-    - uv run --python 3.12 --group dev pytest -q
+
+# Same tests on a GitLab-hosted runner. Starts only when someone plays it.
+windows:hosted:
+  <<: *windows_python
+  stage: test
+  tags: [saas-windows-medium-amd64]
+  allow_failure: true
+  needs:
+    - job: test
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+      when: manual
+    - if: $CI_COMMIT_TAG
+      when: manual
+    - if: $CI_PIPELINE_SOURCE == "web"
+      when: manual
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - src/**/*
+        - tests/**/*
+        - pyproject.toml
+        - uv.lock
+      when: manual
 
 release-check:
   stage: test
