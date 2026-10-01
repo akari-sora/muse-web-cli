@@ -116,7 +116,7 @@ def _load_muse(data: dict, vm_id: str) -> dict:
     if not isinstance(base, str):
         raise ValueError("base_url")
     parts = urlsplit(base.strip())
-    if parts.scheme not in {"https", "http", "wss", "ws"} or not parts.hostname or parts.username or parts.password:
+    if parts.scheme not in {"https", "wss"} or not parts.hostname or parts.username or parts.password:
         raise ValueError("base_url")
     auth = data.get("auth")
     if not isinstance(auth, dict):
@@ -214,7 +214,12 @@ class ApiBackend:
         except FileNotFoundError:
             return unsupported("status")
         except OSError:
-            return unsupported("status")
+            return setup_status(
+                "credential_permissions",
+                "讀不到憑證檔。",
+                "確認檔案權限後再試。",
+                backend="api",
+            )
         if stat.S_ISLNK(info.st_mode) or not stat.S_ISREG(info.st_mode):
             return credential_loose(error="credential file must be a regular file")
         if _windows(self.platform):
@@ -235,11 +240,28 @@ class ApiBackend:
         try:
             text = self.credential.read_text(encoding="utf-8")
             self._config = _load_config(text)
-        except (OSError, json.JSONDecodeError, ValueError):
-            self._config_error = unsupported(
-                "status",
-                error="憑證不是可用的 JSON。請填 base_url、auth.type、auth.token，以及 vm_id 或 endpoints。",
-                hint=API_HINT,
+        except json.JSONDecodeError:
+            self._config_error = setup_status(
+                "ui_changed",
+                "憑證不是合法的 JSON。",
+                "重新執行 muse-web-cli credential，或修正檔案內容。token 不會印出來。",
+                backend="api",
+            )
+            return self._config_error
+        except OSError:
+            self._config_error = setup_status(
+                "credential_permissions",
+                "讀不到憑證檔。",
+                "確認檔案權限後再試。",
+                backend="api",
+            )
+            return self._config_error
+        except ValueError:
+            self._config_error = setup_status(
+                "ui_changed",
+                "憑證欄位不對。",
+                "重新執行 muse-web-cli credential。token 不會印出來。",
+                backend="api",
             )
             return self._config_error
         return None

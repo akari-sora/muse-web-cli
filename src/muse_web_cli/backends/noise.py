@@ -26,6 +26,7 @@ _EMPTY = b""
 DAEMON = "daemon"
 SENTINEL = "sentinel"
 _SERVICE = {DAEMON: 0, SENTINEL: 1, "vault": 2, "authd": 3}
+_MAX_FRAME = 4 * 1024 * 1024
 
 
 class NoiseError(Exception):
@@ -461,15 +462,12 @@ class Responder:
 def gateway_url(base_url: str, *, vm_id: str, token: str, app_id: str, notary_token: str | None) -> str:
     parts = urlsplit(base_url.strip())
     scheme = parts.scheme.lower()
-    if scheme in {"http", "ws"}:
-        secure = "ws"
-    elif scheme in {"https", "wss"}:
-        secure = "wss"
-    else:
+    if scheme not in {"https", "wss"}:
         raise NoiseError("base_url")
     host = parts.hostname or ""
     if not host or parts.username or parts.password:
         raise NoiseError("base_url")
+    secure = "wss"
     path = parts.path or "/v1/noise"
     if path in {"", "/"}:
         path = "/v1/noise"
@@ -508,11 +506,23 @@ class Socket:
         self._sock.sendall(header + mask + masked)
 
     def recv(self) -> bytes:
+        chunks: list[bytes] = []
         while True:
-            frame = self._read_frame()
-            opcode, payload = frame
+            opcode, fin, payload = self._read_frame()
+            if opcode == 0x0:
+                if not chunks:
+                    raise NoiseError("unexpected continuation")
+                chunks.append(payload)
+                if fin:
+                    return b"".join(chunks)
+                continue
+            if chunks:
+                raise NoiseError("expected continuation")
             if opcode == 0x2:
-                return payload
+                if fin:
+                    return payload
+                chunks.append(payload)
+                continue
             if opcode == 0x9:
                 self._send_control(0xA, payload)
                 continue
@@ -520,6 +530,7 @@ class Socket:
                 raise NoiseError("socket closed")
             if opcode == 0x1:
                 raise NoiseError("unexpected text frame")
+            raise NoiseError("opcode")
 
     def close(self) -> None:
         try:
@@ -545,8 +556,9 @@ class Socket:
         out, self._buf = self._buf[:count], self._buf[count:]
         return out
 
-    def _read_frame(self) -> tuple[int, bytes]:
+    def _read_frame(self) -> tuple[int, bool, bytes]:
         first = self._read_exact(2)
+        fin = bool(first[0] & 0x80)
         opcode = first[0] & 0x0F
         masked = bool(first[1] & 0x80)
         length = first[1] & 0x7F
@@ -554,11 +566,13 @@ class Socket:
             length = struct.unpack("!H", self._read_exact(2))[0]
         elif length == 127:
             length = struct.unpack("!Q", self._read_exact(8))[0]
+        if length > _MAX_FRAME:
+            raise NoiseError("frame")
         mask = self._read_exact(4) if masked else b""
         payload = self._read_exact(length)
         if mask:
             payload = bytes(byte ^ mask[index % 4] for index, byte in enumerate(payload))
-        return opcode, payload
+        return opcode, fin, payload
 
 
 def open_socket(url: str, timeout: float) -> Socket:
@@ -610,6 +624,7 @@ class Session:
         self._timeout = timeout
         self._sock: Socket | None = None
         self._transport: Transport | None = None
+        self._open_stream: int | None = None
 
     def __repr__(self) -> str:
         return "Session(gateway)"
@@ -617,6 +632,7 @@ class Session:
     def call(self, service: str, verb: str, path: str, *, body: bytes, accept_first: bool = False) -> tuple[int, bytes]:
         self._ensure()
         assert self._transport is not None and self._sock is not None
+        self._drain_open()
         headers = [
             ("x-request-id", str(uuid.uuid4())),
             ("x-app-id", self._app_id),
@@ -625,28 +641,53 @@ class Session:
         if body:
             headers.insert(0, ("Content-Type", "application/json"))
         frames = self._transport.encrypt_request(service, verb, path, headers, body)
+        stream_id = self._transport._stream
         for frame in frames:
             self._sock.send(frame)
         collected = bytearray()
         status = 200
         while True:
-            incoming = self._transport.decrypt(self._sock.recv())
-            if incoming is None:
+            incoming = self._next_frame()
+            if incoming.get("stream_id") != stream_id:
                 continue
             if incoming["case"] == "reset":
+                self._open_stream = None
                 raise NoiseError("reset")
             if incoming["case"] == "request":
                 raise NoiseError("unexpected request")
             collected.extend(incoming.get("body") or b"")
+            ended = bool(incoming.get("end_body"))
             if incoming["case"] == "response":
                 status = int(incoming["status"] or 200)
-                if accept_first:
-                    break
-            if incoming.get("end_body"):
+            if ended:
+                self._open_stream = None
+                break
+            if accept_first and incoming["case"] == "response":
+                self._open_stream = stream_id
                 break
         return status, bytes(collected)
 
+    def _next_frame(self) -> dict:
+        assert self._transport is not None and self._sock is not None
+        while True:
+            incoming = self._transport.decrypt(self._sock.recv())
+            if incoming is not None:
+                return incoming
+
+    def _drain_open(self) -> None:
+        open_id = self._open_stream
+        if not open_id:
+            return
+        while True:
+            incoming = self._next_frame()
+            if incoming.get("stream_id") != open_id:
+                continue
+            if incoming.get("case") == "reset" or incoming.get("end_body"):
+                self._open_stream = None
+                return
+
     def close(self) -> None:
+        self._open_stream = None
         if self._sock is not None:
             self._sock.close()
             self._sock = None

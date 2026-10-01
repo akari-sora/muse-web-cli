@@ -7,7 +7,9 @@ token, the vm id, or message text from a live session.
 from __future__ import annotations
 
 import base64
+import inspect
 import json
+import os
 import time
 from pathlib import Path
 from urllib.parse import urlencode
@@ -20,11 +22,16 @@ from muse_web_cli.model import (
     memory_payload,
     messages_payload,
     pending_payload,
+    reply_after,
+    reply_text,
     send_payload,
     setup_status,
+    visible_messages,
 )
 from muse_web_cli.output import safe_text
 
+_GATEWAY_REJECTED = "gateway 拒絕這次操作"
+_GATEWAY_HINT = "看 gateway 回的狀態，確認 vm_id 與這項操作。token 不會印出來。"
 _NODE = "muse-web-cli"
 _CAPS = [
     "chat_cancel",
@@ -42,17 +49,7 @@ def _unwrap(parsed: dict) -> dict:
         return parsed["result"]
     if ok:
         return parsed
-    err = parsed.get("error")
-    message = ""
-    if isinstance(err, dict):
-        message = str(err.get("message") or err.get("code") or "")
-    elif isinstance(err, str):
-        message = err
-    raise GatewayError(
-        "ui_changed",
-        safe_text(message) or "gateway 拒絕這次操作",
-        "看 gateway 回的狀態，確認 vm_id 與這項操作。",
-    )
+    raise GatewayError("ui_changed", _GATEWAY_REJECTED, _GATEWAY_HINT)
 
 
 class GatewayError(Exception):
@@ -81,11 +78,19 @@ def read_current(credential: Path) -> str | None:
 
 def write_current(credential: Path, session_id: str) -> None:
     path = _current_path(credential)
-    path.write_text(json.dumps({"session_id": session_id}), encoding="utf-8")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    payload = json.dumps({"session_id": session_id}, ensure_ascii=False).encode("utf-8")
+    temporary = path.with_name(path.name + ".tmp")
+    fd = os.open(temporary, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
     try:
-        path.chmod(0o600)
-    except OSError:
-        pass
+        os.write(fd, payload)
+        try:
+            os.fchmod(fd, 0o600)
+        except (AttributeError, OSError):
+            pass
+    finally:
+        os.close(fd)
+    os.replace(temporary, path)
 
 
 def clear_current(credential: Path) -> None:
@@ -148,40 +153,46 @@ def _history_query(limit: int, session: str | None) -> dict:
     return query
 
 
-def _pairs_reply(rows: list, text: str) -> tuple[str | None, int | None]:
-    last_user = None
-    reply = None
-    for index, row in enumerate(rows):
-        if not isinstance(row, dict):
+def _public_messages(rows: list) -> list[Message]:
+    found: list[Message] = []
+    for row in rows:
+        if not isinstance(row, dict) or row.get("role") not in {"user", "assistant"}:
             continue
-        if row.get("role") == "user" and row.get("text") == text:
-            last_user = index
-            reply = None
-            continue
-        if last_user is not None and row.get("role") == "assistant" and isinstance(row.get("text"), str) and row["text"]:
-            reply = row["text"]
-    return reply, last_user
+        text = row.get("text") if isinstance(row.get("text"), str) else ""
+        found.append(
+            Message(
+                role=row["role"],
+                text=text,
+                presentation=bool(row.get("presentation")),
+                has_actions=True,
+            )
+        )
+    return found
 
 
-def _fresh_reply(payload: dict, text: str, prior: list) -> str | None:
-    rows = payload.get("messages") if isinstance(payload.get("messages"), list) else []
-    new_reply, new_at = _pairs_reply(rows, text)
-    old_reply, old_at = _pairs_reply(prior, text)
-    if not new_reply:
+def _new_reply(rows: list, prior_count: int, text: str) -> tuple[str, bool] | None:
+    """A settled assistant reply that appears after the pre-send snapshot."""
+    messages = _public_messages(rows)
+    ready = reply_text(messages, text)
+    if ready is None or not ready[0]:
         return None
-    if old_reply is None:
-        return new_reply
-    if new_reply != old_reply:
-        return new_reply
-    if len(rows) > len(prior) and new_at is not None and old_at is not None and new_at > old_at:
-        return new_reply
-    return None
+    tail = reply_after(messages, text)
+    if not tail:
+        return None
+    shown = visible_messages(messages)
+    last = tail[-1]
+    index = next((i for i, item in enumerate(shown) if item is last), None)
+    if index is None or index < prior_count:
+        return None
+    return ready
 
 
 def messages_from(data: dict) -> list[Message]:
     found: list[Message] = []
     for row in _message_rows(data):
-        role = _role(row.get("role") or row.get("author") or _event_role(row.get("event_name")))
+        role = _role(row.get("role"))
+        if role is None:
+            role = _event_role(row.get("event_name"))
         if role is None:
             continue
         text = _event_text(row)
@@ -223,11 +234,23 @@ def _title(row: dict) -> str:
     return ""
 
 
-def chats_from(data: dict, *, current: str | None) -> list[dict]:
+def _chat_rows(data: dict) -> list[dict]:
     rows = data.get("sessions") if isinstance(data.get("sessions"), list) else data.get("chats")
     if not isinstance(rows, list):
-        rows = []
-    parsed = [item for item in rows if isinstance(item, dict)]
+        return []
+    return [item for item in rows if isinstance(item, dict)]
+
+
+def _chat_id(item: dict) -> str | None:
+    for key in ("session_id", "id", "chat_id"):
+        value = item.get(key)
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return None
+
+
+def chats_from(data: dict, *, current: str | None) -> list[dict]:
+    parsed = _chat_rows(data)
     primary = next((item for item in parsed if item.get("is_primary") or item.get("kind") == "main"), None)
     ordered = []
     if primary is not None:
@@ -235,8 +258,7 @@ def chats_from(data: dict, *, current: str | None) -> list[dict]:
     ordered.extend(item for item in parsed if item is not primary)
     chats = []
     for item in ordered:
-        session_id = item.get("session_id") or item.get("id")
-        session_id = session_id if isinstance(session_id, str) and session_id else None
+        session_id = _chat_id(item)
         kind = "main" if item is primary or item.get("kind") == "main" or item.get("is_primary") else "side"
         if item.get("is_thread") is True:
             kind = "side"
@@ -337,6 +359,16 @@ def memory_text(data: dict) -> str:
     return ""
 
 
+def _accepts_first(fn) -> bool:
+    try:
+        params = inspect.signature(fn).parameters
+    except (TypeError, ValueError):
+        return False
+    if "accept_first" in params:
+        return True
+    return any(item.kind == inspect.Parameter.VAR_KEYWORD for item in params.values())
+
+
 class MuseGateway:
     def __init__(self, config: dict, *, credential: Path, session=None, sleep=None):
         self.config = config
@@ -353,7 +385,7 @@ class MuseGateway:
         def run():
             self._json(DAEMON, "GET", "/health")
             approvals = self._json(SENTINEL, "GET", "/approvals")
-            history = self._json(DAEMON, "GET", "/chat/history", query=_history_query(5, None))
+            history = self._json(DAEMON, "GET", "/chat/history", query=_history_query(5, self._pick(None)))
             rows = messages_from(history)
             last = next((item for item in reversed(rows) if item.role == "assistant"), None)
             return {
@@ -383,8 +415,15 @@ class MuseGateway:
         prior: list = []
         if wait:
             snap = self.messages(20, session=chosen or "main")
-            if snap.get("state") == "ok" and isinstance(snap.get("messages"), list):
-                prior = snap["messages"]
+            if snap.get("state") != "ok" or not isinstance(snap.get("messages"), list):
+                return send_payload(
+                    backend="api",
+                    state=str(snap.get("state") or "ui_changed"),
+                    text=text,
+                    error=snap.get("error") if isinstance(snap.get("error"), str) else None,
+                    hint=snap.get("hint") if isinstance(snap.get("hint"), str) else None,
+                )
+            prior = snap["messages"]
 
         def once():
             body = {
@@ -404,28 +443,25 @@ class MuseGateway:
             first["hint"] = "沒有再送一次"
         if not wait or first.get("state") != "ok":
             return first
+        gap = 0.2
         while time.monotonic() - started < timeout:
             remaining = timeout - (time.monotonic() - started)
             polled = self.messages(20, session=chosen or "main")
-            if polled.get("state") == "timeout":
-                first["state"] = "timeout"
-                first["error"] = polled.get("error")
-                first["hint"] = "沒有再送一次"
-                return first
-            if polled.get("state") == "session_expired":
-                first["state"] = "session_expired"
-                first["error"] = polled.get("error")
-                first["hint"] = polled.get("hint") or "沒有再送一次"
-                return first
             if polled.get("state") != "ok":
-                self.sleep(min(0.05, max(0.0, remaining)))
-                continue
-            reply = _fresh_reply(polled, text, prior)
-            if reply:
-                first["reply"] = reply
+                first["state"] = str(polled.get("state") or "ui_changed")
+                first["error"] = polled.get("error")
+                first["hint"] = "沒有再送一次" if first["state"] == "timeout" else polled.get("hint")
+                return first
+            rows = polled.get("messages") if isinstance(polled.get("messages"), list) else []
+            ready = _new_reply(rows, len(prior), text)
+            if ready:
+                body, presentation = ready
+                first["reply"] = body
+                first["presentation"] = presentation
                 first["elapsed_ms"] = int((time.monotonic() - started) * 1000)
                 return first
-            self.sleep(min(0.05, max(0.0, remaining)))
+            self.sleep(min(gap, max(0.0, remaining)))
+            gap = min(gap * 2, 2.0)
         first["state"] = "timeout"
         first["error"] = "等待逾時"
         first["hint"] = "沒有再送一次"
@@ -463,18 +499,20 @@ class MuseGateway:
         def run():
             if action == "create":
                 created = self._json(DAEMON, "POST", "/api/chats/start", body={})
-                new_id = created.get("chat_id") if isinstance(created.get("chat_id"), str) else None
+                new_id = _chat_id(created)
                 if not new_id:
-                    new_id = created.get("session_id") if isinstance(created.get("session_id"), str) else None
-                if new_id and new_id.strip():
-                    new_id = new_id.strip()
-                    self._json(
-                        DAEMON,
-                        "POST",
-                        "/session/rename",
-                        body={"session_id": new_id, "title": title or "新聊天"},
+                    raise GatewayError(
+                        "ui_changed",
+                        "沒有拿到新聊天室的 id。",
+                        "聊天可能已建立。再執行 chats，用列出的 id。",
                     )
-                    write_current(self.credential, new_id)
+                self._json(
+                    DAEMON,
+                    "POST",
+                    "/session/rename",
+                    body={"session_id": new_id, "title": title or "新聊天"},
+                )
+                write_current(self.credential, new_id)
             elif action == "rename":
                 self._json(
                     DAEMON,
@@ -494,11 +532,7 @@ class MuseGateway:
             data = self._json(DAEMON, "GET", "/api/session/list")
             if action == "switch":
                 target = None if session in {None, "", "main"} else session
-                known = {
-                    item.get("session_id")
-                    for item in (data.get("sessions") or [])
-                    if isinstance(item, dict) and isinstance(item.get("session_id"), str)
-                }
+                known = {item_id for item in _chat_rows(data) if (item_id := _chat_id(item))}
                 if target and target not in known:
                     raise GatewayError(
                         "ui_changed",
@@ -564,10 +598,12 @@ class MuseGateway:
         if query:
             path = f"{path}?{urlencode(query)}"
         raw = b"" if body is None else json.dumps(body, ensure_ascii=False).encode("utf-8")
+        session = self._session_call()
+        kwargs = {"body": raw}
+        if accept_first and _accepts_first(session.call):
+            kwargs["accept_first"] = True
         try:
-            status, payload = self._session_call().call(service, verb, path, body=raw, accept_first=accept_first)
-        except TypeError:
-            status, payload = self._session_call().call(service, verb, path, body=raw)
+            status, payload = session.call(service, verb, path, **kwargs)
         except TimeoutError as exc:
             raise GatewayError("timeout", "等待逾時", "沒有再送一次" if path.startswith("/chat/stream") else "再試一次。沒有重送。") from exc
         except NoiseError as exc:
@@ -577,8 +613,7 @@ class MuseGateway:
         if status in {401, 403}:
             raise GatewayError("session_expired", "憑證被拒絕", "換掉 auth.token 後再試。這個工具不會印出 token。")
         if status >= 400:
-            detail = safe_text(payload.decode("utf-8", "replace")) if payload else f"HTTP {status}"
-            raise GatewayError("ui_changed", detail or f"HTTP {status}", "看 gateway 回的狀態，確認 vm_id 與這項操作。")
+            raise GatewayError("ui_changed", _GATEWAY_REJECTED, _GATEWAY_HINT)
         if not payload:
             return {}
         try:

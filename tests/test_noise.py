@@ -1,4 +1,6 @@
-from muse_web_cli.backends.noise import Handshake, Responder, Session, gateway_url
+import struct
+
+from muse_web_cli.backends.noise import Handshake, NoiseError, Responder, Session, Socket, gateway_url
 
 
 def test_noise_xx_round_trip_carries_one_http_response():
@@ -94,3 +96,93 @@ def test_gateway_url_uses_the_noise_path_and_query_names():
         "app_id",
         "request_id",
     ]
+
+
+def _loopback():
+    initiator = Handshake()
+    responder = Responder()
+    initiator.start()
+    responder.start()
+    responder.read_message1(initiator.write_message1())
+    initiator.read_message2(responder.write_message2(b""))
+    responder.read_message3(initiator.write_message3(b""))
+    return initiator.split(), responder.split()
+
+
+def test_next_history_keeps_its_own_body_after_an_open_stream():
+    client, server = _loopback()
+    opened = server.encrypt_response(stream_id=1, status=200, body=b'{"partial":true}', end_body=False)
+    leftover = server.encrypt_response(stream_id=1, status=200, body=b'{"rest":1}', end_body=True)
+    history = server.encrypt_response(stream_id=2, status=200, body=b'{"messages":[]}', end_body=True)
+    session = Session(
+        "https://hatch.metaaivm.com",
+        vm_id="vm-unit",
+        token="unit-test-token",
+        app_id="hatch-web",
+        notary_token=None,
+        timeout=1,
+    )
+    session._transport = client
+    session._sock = _Frames([opened, leftover, history])
+    status, body = session.call("daemon", "POST", "/chat/stream", body=b"{}", accept_first=True)
+    assert status == 200
+    assert body == b'{"partial":true}'
+    status, body = session.call("daemon", "GET", "/chat/history", body=b"")
+    assert status == 200
+    assert body == b'{"messages":[]}'
+    assert b"rest" not in body
+
+
+def test_gateway_url_refuses_cleartext():
+    token = "unit-test-token"
+    for base in ("http://hatch.metaaivm.com", "ws://hatch.metaaivm.com"):
+        try:
+            gateway_url(base, vm_id="vm-unit", token=token, app_id="hatch-web", notary_token=None)
+        except NoiseError as exc:
+            assert token not in str(exc)
+            assert "auth_token=" not in str(exc)
+        else:
+            raise AssertionError(base)
+
+
+class _Raw:
+    def recv(self, count):
+        raise AssertionError("frame should already be buffered")
+
+    def sendall(self, payload):
+        return None
+
+    def close(self):
+        return None
+
+
+def _frame(opcode, payload, *, fin=True):
+    first = (0x80 if fin else 0x00) | opcode
+    length = len(payload)
+    if length < 126:
+        header = bytes([first, length])
+    elif length < 65536:
+        header = bytes([first, 126]) + struct.pack("!H", length)
+    else:
+        header = bytes([first, 127]) + struct.pack("!Q", length)
+    return header + payload
+
+
+def test_binary_fragments_are_joined_and_bad_frames_fail():
+    sock = Socket(_Raw())
+    sock._buf = _frame(0x2, b"abc", fin=False) + _frame(0x0, b"def", fin=True)
+    assert sock.recv() == b"abcdef"
+    sock._buf = bytes([0x83, 0])
+    try:
+        sock.recv()
+    except NoiseError:
+        pass
+    else:
+        raise AssertionError("opcode")
+    sock._buf = bytes([0x82, 127]) + struct.pack("!Q", 5 * 1024 * 1024)
+    try:
+        sock.recv()
+    except NoiseError:
+        pass
+    else:
+        raise AssertionError("frame")

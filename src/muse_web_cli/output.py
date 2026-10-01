@@ -10,7 +10,12 @@ from muse_web_cli.model import exit_for
 
 _WS = re.compile(r"wss?://\S+")
 _HTTP = re.compile(r"https?://\S+")
-_SECRET = re.compile(r"(?i)\b(cookie|csrf|csrf-token|token|authorization|set-cookie)\b\s*[:=]\s*\S+")
+_SECRET = re.compile(
+    r"(?i)\b(auth_token|notary_token|cookie|csrf-token|csrf|token|authorization|set-cookie)\b\s*[:=]\s*\S+"
+)
+_BEARER = re.compile(r"(?i)\bBearer\s+\S+")
+_JSON_TOKEN = re.compile(r'(?i)"(auth_token|notary_token|token)"\s*:\s*"(?:\\.|[^"\\])*"')
+_JWT = re.compile(r"\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{4,}")
 
 
 def strip_query(url: str) -> str:
@@ -21,9 +26,16 @@ def strip_query(url: str) -> str:
     return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
+def _json_token(match: re.Match) -> str:
+    return f'"{match.group(1)}":"<redacted>"'
+
+
 def safe_text(text: str) -> str:
     text = _WS.sub("ws://redacted", text or "")
     text = _HTTP.sub(lambda match: strip_query(match.group(0)), text)
+    text = _BEARER.sub("Bearer <redacted>", text)
+    text = _JSON_TOKEN.sub(_json_token, text)
+    text = _JWT.sub("<redacted>", text)
     text = _SECRET.sub(r"\1=<redacted>", text)
     return text[:800]
 

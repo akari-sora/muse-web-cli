@@ -1,13 +1,18 @@
 # Changelog
 
+## [0.1.3] - 2026-10-01
+
+- The token is written only into `~/.trinity-cli/muse-credential` (mode 600) and is not printed. `credential` does that write; it does not print the token.
+- The gateway is the `--backend api` behavior. Exit 4 is only a missing credential file, or both `vm_id` and `endpoints` empty. A missing token, bad JSON, a wrong auth field, and a permission error name the next step and use exit 2 or 3.
+- `send --wait` accepts only a settled assistant message that appears after the pre-send snapshot, and returns immediately when that read is not ok.
+
 ## [0.1.2] - 2026-10-01
 
 - Document first-time setup, every command, exit-code fixes, and troubleshooting in Traditional Chinese and English.
 - Show global flags, defaults, and examples in `--help`.
 - Support Linux, Windows, and macOS: Chrome discovery, process stop, profile locks, and UTF-8 console output. Linux is covered by CI, Windows by CI, and macOS by local tests plus a live read-only check.
 - `login` on Linux without a display returns `browser_down` and leaves an already-running headless Chrome in place.
-- The api backend is a generic client for a credential the user writes. With `vm_id` it calls the open Muse gateway for status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch. Exit 4 is a missing credential or an empty endpoint.
-- `credential` reads the logged-in Muse page and writes `~/.trinity-cli/muse-credential` (mode 600). A missing session runs `login` first. The token is not printed.
+- The api backend is a generic client for a credential the user writes. With `vm_id` it calls the open Muse gateway for status, messages, send, pending, schedules, activity, memory, and chat list/create/rename/delete/switch. Exit 4 is a missing credential or an empty endpoint. The tool never extracts cookies or tokens.
 - Part of trinity-cli: https://gitlab.com/aa22396584/trinity-cli
 
 Supported operating systems:

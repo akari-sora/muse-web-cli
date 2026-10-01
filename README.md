@@ -20,20 +20,20 @@ trinity-cli 系列的一部分。Part of the trinity-cli family.
 
 ### 安裝
 
-v0.1.2。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.2`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.3。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.3`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 muse-web-cli --version
 ```
 
@@ -171,7 +171,7 @@ muse-web-cli --json pending
 | 2 | `credential_permissions` | macOS／Linux：`chmod 600 ~/.trinity-cli/muse-credential`。Windows：檔案必須在使用者主目錄裡，而且是一般檔案 |
 | 3 | `ui_changed` | 跑 `selftest`，看 `missing`。不要在頁面上亂點 |
 | 3 | `timeout` | `hint` 是 `nothing was sent again`。不要自動再送一次 |
-| 4 | `unsupported` | 憑證檔不存在，或 `base_url`／`vm_id`／`endpoints` 沒填。不是「這個功能沒做」 |
+| 4 | `unsupported` | 憑證檔不存在，或 `vm_id` 與 `endpoints` 都沒填。不是「這個功能沒做」 |
 
 ### 後端
 
@@ -259,20 +259,20 @@ If the page says Muse is not available in your region, `status` returns `region_
 
 ### Install
 
-v0.1.2. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.2`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.3. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.3`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.2"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.3"
 muse-web-cli --version
 ```
 
@@ -410,7 +410,7 @@ Global flags may appear before or after the command:
 | 2 | `credential_permissions` | macOS/Linux: `chmod 600 ~/.trinity-cli/muse-credential`. Windows: the file must be a regular file under your home directory |
 | 3 | `ui_changed` | Run `selftest` and read `missing`. Do not click around the page |
 | 3 | `timeout` | `hint` is `nothing was sent again`. Do not send again automatically |
-| 4 | `unsupported` | The credential file is missing, or `base_url` / `vm_id` / `endpoints` is empty. Not an unimplemented command |
+| 4 | `unsupported` | The credential file is missing, or both `vm_id` and `endpoints` are empty. Not an unimplemented command |
 
 ### Backends
 

@@ -54,7 +54,7 @@ def build_parser() -> argparse.ArgumentParser:
             "Exit 0 ok.\n"
             "Exit 2 setup: browser_down, session_expired, region_blocked, profile_busy, credential_permissions.\n"
             "Exit 3 page: ui_changed, timeout.\n"
-            "Exit 4 unsupported: the credential file is missing, or base_url / vm_id / endpoints is empty.\n"
+            "Exit 4 unsupported: the credential file is missing, or both vm_id and endpoints are empty.\n"
             "Point --backend api at ~/.trinity-cli/muse-credential (mode 600) with base_url, auth.type, auth.token, vm_id."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -127,7 +127,7 @@ def test_browser_down_opens_login(tmp_path):
     assert not path.exists()
 
 
-def test_missing_token_is_exit_4_and_stdout_has_no_secret(tmp_path, capsys, monkeypatch):
+def test_missing_token_is_exit_3_and_stdout_has_no_secret(tmp_path, capsys, monkeypatch):
     path = tmp_path / "muse-credential"
     page = Page()
     result = run_credential(
@@ -137,17 +137,17 @@ def test_missing_token_is_exit_4_and_stdout_has_no_secret(tmp_path, capsys, monk
         capture=lambda _page: _raw(token=""),
         session_state=lambda _page: "ok",
     )
-    assert result["state"] == "unsupported"
+    assert result["state"] == "ui_changed"
     assert result["wrote"] is False
     assert "auth.token" in result["error"]
     assert not path.exists()
     assert TOKEN not in json.dumps(result)
-    assert exit_for(result["state"]) == 4
+    assert exit_for(result["state"]) == 3
 
     monkeypatch.setattr("muse_web_cli.cli._run_credential", lambda settings: result)
     code = main(["--json", "credential"], home=tmp_path)
     printed = capsys.readouterr().out
-    assert code == 4
+    assert code == 3
     assert TOKEN not in printed
     assert "11111111" not in printed
 
@@ -249,3 +249,71 @@ def test_write_credential_replaces_a_loose_file(tmp_path):
     if os.name != "nt":
         assert (path.stat().st_mode & 0o777) == 0o600
     assert json.loads(path.read_text(encoding="utf-8"))["auth"]["token"] == TOKEN
+
+
+def test_other_host_is_not_written(tmp_path):
+    path = tmp_path / "muse-credential"
+    result = run_credential(
+        path,
+        connect=lambda: ({"state": "ok"}, Page()),
+        login=lambda: (_ for _ in ()).throw(AssertionError("login")),
+        capture=lambda _page: _raw(gatewayUrl="https://example.com/v1/noise"),
+        session_state=lambda _page: "ok",
+    )
+    assert result["state"] == "ui_changed"
+    assert result["wrote"] is False
+    assert not path.exists()
+    assert exit_for(result["state"]) == 3
+    blob = json.dumps(result)
+    assert "example.com" not in blob
+    assert TOKEN not in blob
+
+
+def test_http_metaaivm_host_is_stored_as_https():
+    document, missing = document_from(_raw(gatewayUrl="http://hatch.metaaivm.com/?vm_id=vm-unit-id"))
+    assert missing == []
+    assert document["base_url"] == "https://hatch.metaaivm.com"
+
+
+def test_login_then_region_blocked_is_not_logged_out(tmp_path):
+    path = tmp_path / "muse-credential"
+    reads = {"n": 0}
+
+    def connect():
+        reads["n"] += 1
+        if reads["n"] == 1:
+            return {"state": "browser_down"}, None
+        return {"state": "ok"}, Page()
+
+    result = run_credential(
+        path,
+        connect=connect,
+        login=lambda: {"logged_in": True, "state": "ok"},
+        capture=lambda _page: (_ for _ in ()).throw(AssertionError("capture")),
+        session_state=lambda _page: "region_blocked",
+    )
+    assert result["state"] == "region_blocked"
+    assert "尚未登入" not in json.dumps(result, ensure_ascii=False)
+    assert not path.exists()
+
+
+def test_login_then_profile_busy_keeps_its_state(tmp_path):
+    path = tmp_path / "muse-credential"
+    reads = {"n": 0}
+
+    def connect():
+        reads["n"] += 1
+        if reads["n"] == 1:
+            return {"state": "browser_down"}, None
+        return {"state": "profile_busy", "error": "profile is busy", "hint": "close the other window"}, None
+
+    result = run_credential(
+        path,
+        connect=connect,
+        login=lambda: {"logged_in": True, "state": "ok"},
+        capture=lambda _page: (_ for _ in ()).throw(AssertionError("capture")),
+        session_state=lambda _page: "ok",
+    )
+    assert result["state"] == "profile_busy"
+    assert "尚未登入" not in json.dumps(result, ensure_ascii=False)
+    assert not path.exists()

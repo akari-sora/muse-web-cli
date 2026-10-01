@@ -94,23 +94,24 @@ def public_result(
 
 def gateway_identity(gateway_url: str, vm_name: str) -> tuple[str, str]:
     parts = urlsplit((gateway_url or "").strip())
-    host = parts.hostname or ""
+    host = (parts.hostname or "").lower()
     if parts.scheme not in {"https", "http", "wss", "ws"} or not host or parts.username or parts.password:
         raise ValueError("base_url")
-    scheme = "https" if parts.scheme in {"https", "wss"} else "http"
-    base = f"{scheme}://{host}"
-    if parts.port:
-        base = f"{base}:{parts.port}"
+    if host != _SHARED_HOST and not host.endswith(".metaaivm.com"):
+        raise ValueError("host")
     query = parse_qs(parts.query).get("vm_id") or []
     from_query = query[0].strip() if query and isinstance(query[0], str) else ""
     label = host.split(".")[0]
-    named_vm = host.endswith(".metaaivm.com") and _UUID.match(label)
+    named_vm = host.endswith(".metaaivm.com") and host != _SHARED_HOST and bool(_UUID.match(label))
     if host == _SHARED_HOST or named_vm:
         # The per-VM hostname is an id, not a dialable address. The Noise
         # session uses the shared ingress and puts that id in vm_id.
         base = f"https://{_SHARED_HOST}"
         vm_id = from_query or (label if named_vm else "") or (vm_name or "").strip()
     else:
+        base = f"https://{host}"
+        if parts.port:
+            base = f"{base}:{parts.port}"
         vm_id = from_query or (vm_name or "").strip()
     if not vm_id:
         raise ValueError("vm_id")
@@ -233,9 +234,17 @@ def _from_capture(raw: dict) -> dict:
         )
     document, missing = document_from(raw)
     if document is None:
+        if "host" in missing:
+            return public_result(
+                state="ui_changed",
+                wrote=False,
+                logged_in=True,
+                error="gateway 位址不在允許的範圍。沒有寫入檔案。",
+                hint="只接受 metaaivm.com。確認 Muse 已連上後再執行 muse-web-cli credential。",
+            )
         names = "、".join(missing) if missing else "auth.token"
         return public_result(
-            state="unsupported",
+            state="ui_changed",
             wrote=False,
             logged_in=True,
             error=f"憑證不完整，缺少 {names}。沒有寫入檔案。",

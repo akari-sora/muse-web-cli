@@ -114,9 +114,10 @@ def test_cli_api_backend_json(tmp_path, capsys):
     cred.write_text(CANARY, encoding="utf-8")
     os.chmod(cred, 0o600)
     code = main(["--backend", "api", "--json", "messages", "--limit", "5"], home=tmp_path)
-    assert code == 4
+    assert code == 3
     payload = json.loads(capsys.readouterr().out)
-    assert payload["state"] == "unsupported"
+    assert payload["state"] == "ui_changed"
+    assert "credential" in (payload.get("hint") or "")
     assert payload["name"] == "Muse"
     assert payload["messages"] == []
     assert CANARY not in json.dumps(payload)
@@ -130,4 +131,57 @@ def test_cli_help_and_limit(tmp_path, capsys):
 
 def test_cli_version(tmp_path, capsys):
     assert main(["--version"], home=tmp_path) == 0
-    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.2"
+    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.3"
+
+
+def test_wrong_auth_field_and_cleartext_are_exit_3(tmp_path):
+    path = tmp_path / "muse-credential"
+    path.write_text(
+        json.dumps(
+            {
+                "base_url": "https://hatch.metaaivm.com",
+                "vm_id": "vm-unit",
+                "auth": {"type": "nope", "token": CANARY},
+            }
+        ),
+        encoding="utf-8",
+    )
+    os.chmod(path, 0o600)
+    wrong = ApiBackend(path).status()
+    assert wrong["state"] == "ui_changed"
+    assert exit_for(wrong["state"]) == 3
+    assert CANARY not in json.dumps(wrong)
+    assert "credential" in wrong["hint"]
+    path.write_text(
+        json.dumps(
+            {
+                "base_url": "http://hatch.metaaivm.com",
+                "vm_id": "vm-unit",
+                "auth": {"type": "bearer", "token": CANARY},
+            }
+        ),
+        encoding="utf-8",
+    )
+    os.chmod(path, 0o600)
+    clear = ApiBackend(path).status()
+    assert clear["state"] == "ui_changed"
+    assert exit_for(clear["state"]) == 3
+    assert CANARY not in json.dumps(clear)
+    assert "http://" not in json.dumps(clear)
+
+
+def test_credential_lstat_error_is_exit_2(tmp_path, monkeypatch):
+    from pathlib import Path
+
+    path = tmp_path / "muse-credential"
+    path.write_text("{}", encoding="utf-8")
+    os.chmod(path, 0o600)
+
+    def explode(self, *args, **kwargs):
+        raise OSError(13, "denied")
+
+    monkeypatch.setattr(Path, "lstat", explode)
+    payload = ApiBackend(path).status()
+    assert payload["state"] == "credential_permissions"
+    assert exit_for(payload["state"]) == 2
+    assert "再試" in payload["hint"]
