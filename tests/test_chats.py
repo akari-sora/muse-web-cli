@@ -117,3 +117,17 @@ def test_api_chats_are_unsupported(tmp_path, capsys):
     body = capsys.readouterr().out
     assert "token-like" not in body
     assert json.loads(body)["chats"] == []
+
+
+def test_session_on_the_browser_backend_is_refused_before_chrome(tmp_path, capsys, monkeypatch):
+    import muse_web_cli.cli as cli
+
+    def no_chrome(*args, **kwargs):
+        raise AssertionError("chrome")
+
+    monkeypatch.setattr(cli, "_ensure", no_chrome)
+    for argv in (["send", "--session", "side-1", "--", "hi"], ["messages", "--session", "side-1"]):
+        assert cli.main(argv, home=tmp_path) == 2
+        err = capsys.readouterr().err
+        assert "--backend api" in err
+        assert "沒有送出" in err

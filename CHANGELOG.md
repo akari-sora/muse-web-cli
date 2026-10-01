@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.1.4] - 2026-10-01
+
+- `send --wait` on the gateway now finds the reply in a chat longer than 20 messages. 0.1.3 compared positions in two windows that each hold only the latest messages, so in a long chat every wait timed out even after the reply arrived. The pre-send window and the poll are now lined up by content, and the poll reads 50 messages.
+- `send --wait` keeps waiting until `--timeout` when the open Noise stream is quiet for longer than `timeout_s`. It still finishes reading that stream before the next request, and it still never sends again.
+- `--session` on the browser backend is refused with exit 2 before anything is sent. It used to be ignored, so the text went to whatever chat the window had open.
+- `chats --rename` and `--delete` take only a `session_id` that `chats` lists, the same ids as `--switch`. `--delete` refuses the main chat. Nothing is sent when the id is refused.
+- Every printed `error` and `hint` is scrubbed of `auth_token=`, `access_token=`, `api_key:`, `password=`, `Bearer …`, and bare JWTs, in JSON and text output. A REST server's own error state is reshaped and can no longer produce exit 4 or extra keys.
+- Clearing a draft that React did not commit uses Control+A on Linux and Windows (Meta+A only on macOS).
+- Docs: the default backend is the browser; the gateway is `--backend api`; only `credential` stores a token, and only in `~/.trinity-cli/muse-credential` (mode 600). `credential`, `--session`, and the chat mutation flags are in the command reference.
+- CI: a tag pipeline fails when the tag is not `v` plus the `pyproject.toml` version, or when that changelog section still says Unreleased. Tests check that the version, this changelog, `uv.lock`, and the README install pins agree.
+
 ## [0.1.3] - 2026-10-01
 
 - The token is written only into `~/.trinity-cli/muse-credential` (mode 600) and is not printed. `credential` does that write; it does not print the token.

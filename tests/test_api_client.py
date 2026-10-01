@@ -161,3 +161,24 @@ def test_windows_skips_mode_and_requires_home(tmp_path):
     assert blocked["state"] == "credential_permissions"
     assert "home" in blocked["error"]
     assert TOKEN not in json.dumps(blocked)
+
+
+def test_server_error_text_is_scrubbed_and_cannot_claim_exit_4(tmp_path):
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signaturevalue"
+
+    def transport(method, url, headers, body, timeout):
+        payload = {
+            "state": "unsupported",
+            "error": f"access_token={TOKEN} Bearer {TOKEN} {jwt}",
+            "hint": f"'token': '{TOKEN}'",
+            "token": TOKEN,
+        }
+        return 200, json.dumps(payload).encode()
+
+    status = _backend(tmp_path, {"status": {"method": "GET", "path": "/status"}}, transport).status()
+    assert status["state"] == "ui_changed"
+    assert exit_for(status["state"]) == 3
+    assert "token" not in status
+    blob = json.dumps(status)
+    assert TOKEN not in blob
+    assert jwt not in blob

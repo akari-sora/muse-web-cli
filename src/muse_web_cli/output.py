@@ -11,7 +11,8 @@ from muse_web_cli.model import exit_for
 _WS = re.compile(r"wss?://\S+")
 _HTTP = re.compile(r"https?://\S+")
 _SECRET = re.compile(
-    r"(?i)\b(auth_token|notary_token|cookie|csrf-token|csrf|token|authorization|set-cookie)\b\s*[:=]\s*\S+"
+    r"(?i)\b(auth_token|notary_token|access_token|refresh_token|id_token|api[_-]?key|password|secret"
+    r"|cookie|csrf-token|csrf|token|authorization|set-cookie)\b['\"]?\s*[:=：]\s*\S+"
 )
 _BEARER = re.compile(r"(?i)\bBearer\s+\S+")
 _JSON_TOKEN = re.compile(r'(?i)"(auth_token|notary_token|token)"\s*:\s*"(?:\\.|[^"\\])*"')
@@ -123,7 +124,17 @@ def human(payload: dict) -> str:
     )
 
 
+def scrubbed(payload: dict) -> dict:
+    """error and hint can carry text from a server. Message text is left alone."""
+    clean = dict(payload)
+    for key in ("error", "hint"):
+        if isinstance(clean.get(key), str):
+            clean[key] = safe_text(clean[key])
+    return clean
+
+
 def emit(payload: dict, *, as_json: bool) -> int:
+    payload = scrubbed(payload)
     if as_json:
         print(dumps(payload))
     else:

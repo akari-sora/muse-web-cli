@@ -1,6 +1,7 @@
 import json
 import os
 
+from muse_web_cli import __version__
 from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.cli import main
 from muse_web_cli.config import resolve_settings
@@ -131,7 +132,7 @@ def test_cli_help_and_limit(tmp_path, capsys):
 
 def test_cli_version(tmp_path, capsys):
     assert main(["--version"], home=tmp_path) == 0
-    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.3"
+    assert capsys.readouterr().out.strip() == f"muse-web-cli {__version__}"
 
 
 def test_wrong_auth_field_and_cleartext_are_exit_3(tmp_path):

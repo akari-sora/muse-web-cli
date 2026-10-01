@@ -418,3 +418,80 @@ def test_error_body_secrets_stay_off_both_streams(tmp_path, capsys):
     assert f'"token":"{secret}"' not in blob
     assert f"Bearer {secret}" not in blob
     assert "gateway 拒絕這次操作" in captured.out
+
+
+def _long_history(count, *, tail=()):
+    rows = [{"role": "user" if i % 2 == 0 else "assistant", "content": f"old-{i}"} for i in range(count)]
+    return {"messages": [*rows, *tail]}
+
+
+class _Long:
+    """History longer than one window. After the send, the reply shows up on the third read."""
+
+    def __init__(self, before, after, *, quiet=0):
+        self.before = before
+        self.after = after
+        self.quiet = quiet
+        self.history = 0
+        self.calls = []
+
+    def call(self, service, verb, path, *, body, accept_first=False):
+        key = path.split("?", 1)[0]
+        self.calls.append((key, path))
+        if key == "/chat/stream":
+            return 200, b"{}"
+        self.history += 1
+        if self.history > 1 and self.quiet:
+            self.quiet -= 1
+            raise TimeoutError()
+        payload = self.before if self.history < 3 else self.after
+        return 200, json.dumps(payload).encode()
+
+    def close(self):
+        return None
+
+
+def test_wait_finds_the_reply_when_the_chat_is_longer_than_the_window(tmp_path):
+    old_turn = ({"role": "user", "content": "nonce-text"}, {"role": "assistant", "content": "old-answer"})
+    new_turn = ({"role": "user", "content": "nonce-text"}, {"role": "assistant", "content": "fresh-ok"})
+    gate = _Long(_long_history(40, tail=old_turn), _long_history(40, tail=(*old_turn, *new_turn)))
+    sent = ApiBackend(_file(tmp_path), gateway_session=gate, sleep=lambda seconds: None).send(
+        "nonce-text", wait=True, timeout=5
+    )
+    assert sent["state"] == "ok"
+    assert sent["reply"] == "fresh-ok"
+    assert [key for key, _ in gate.calls].count("/chat/stream") == 1
+    assert gate.history == 3
+
+
+def test_wait_keeps_going_after_a_quiet_stream_times_out(tmp_path):
+    new_turn = ({"role": "user", "content": "nonce-text"}, {"role": "assistant", "content": "fresh-ok"})
+    gate = _Long(_long_history(4), _long_history(4, tail=new_turn), quiet=1)
+    sleeps = []
+    sent = ApiBackend(_file(tmp_path), gateway_session=gate, sleep=lambda seconds: sleeps.append(seconds)).send(
+        "nonce-text", wait=True, timeout=5
+    )
+    assert sent["state"] == "ok"
+    assert sent["reply"] == "fresh-ok"
+    assert sleeps
+    assert [key for key, _ in gate.calls].count("/chat/stream") == 1
+
+
+def test_a_reply_that_was_streaming_before_the_send_is_not_new():
+    from muse_web_cli.backends.gateway import _new_reply
+
+    prior = [{"role": "user", "text": "nonce-text"}, {"role": "assistant", "text": "hal"}]
+    grown = [{"role": "user", "text": "nonce-text"}, {"role": "assistant", "text": "half done"}]
+    assert _new_reply(prior, grown, "nonce-text") is None
+    answered = [*grown, {"role": "user", "text": "nonce-text"}, {"role": "assistant", "text": "fresh-ok"}]
+    assert _new_reply(prior, answered, "nonce-text") == ("fresh-ok", False)
+
+
+def test_delete_and_rename_take_only_listed_side_chats(tmp_path):
+    for action, session in (("delete", "main-1"), ("delete", "main"), ("delete", "missing"), ("rename", "missing")):
+        script = Script(_table())
+        payload = _backend(tmp_path, script).chats(action=action, session=session, title="x")
+        assert payload["state"] == "ui_changed", (action, session)
+        assert exit_for(payload["state"]) == 3
+        assert "沒有送出" in payload["hint"]
+        assert not any(item[2] in {"/session/delete", "/session/rename"} for item in script.calls), (action, session)

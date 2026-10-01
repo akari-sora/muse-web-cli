@@ -1,6 +1,9 @@
 import argparse
+import re
+import tomllib
 from pathlib import Path
 
+from muse_web_cli import __version__
 from muse_web_cli.cli import build_parser
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -43,3 +46,22 @@ def test_readme_links_the_family_and_the_credential_schema():
     assert "trinity-cli" in SKILL
     assert "xvfb-run" in README
     assert "PowerShell" in README
+
+
+def test_version_changelog_and_install_pins_agree():
+    version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
+    assert __version__ == version
+    newest = re.search(r"^## \[([^\]]+)\]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
+    assert newest and newest.group(1) == version
+    assert set(re.findall(r"muse-web-cli\.git@v([^\"\s]+)", README)) == {version}
+    assert f"muse-web-cli {version}" in README
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    assert f'name = "muse-web-cli"\nversion = "{version}"' in lock
+
+
+def test_docs_say_where_the_token_goes():
+    for text in (README, SKILL, build_parser().format_help()):
+        assert "muse-credential" in text
+        assert "mode 600" in text
+    for stale in ("does not export the login", "也不會把登入狀態另存一份", "never extracts cookies or tokens"):
+        assert stale not in README

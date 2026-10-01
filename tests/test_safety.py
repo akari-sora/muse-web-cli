@@ -52,3 +52,24 @@ def test_safe_text_strips_query_and_secret_assignments():
     assert "SECRET" not in cleaned
     assert "devtools/page" not in cleaned
     assert "https://muse.ai/path" in cleaned
+
+
+def test_emit_scrubs_error_and_hint_on_both_outputs(capsys):
+    from muse_web_cli.output import emit
+
+    secret = "unit-secret-value"
+    jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyIn0.signaturevalue"
+    payload = {
+        "backend": "api",
+        "state": "ui_changed",
+        "error": f"auth_token={secret} Authorization: Bearer {secret} {jwt}",
+        "hint": f"api_key: {secret} password={secret} token：{secret}",
+        "missing": [],
+    }
+    for as_json in (True, False):
+        assert emit(payload, as_json=as_json) == 3
+        out = capsys.readouterr().out
+        assert secret not in out
+        assert jwt not in out
+        assert "state" in out
+    assert secret in payload["error"]

@@ -39,7 +39,11 @@ LIMIT_MAX = 100
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="muse-web-cli",
-        description="Drive your own logged-in Muse web app. This does not read cookies or print tokens.",
+        description=(
+            "Drive your own logged-in Muse web app. The default backend is the browser. "
+            "It does not read cookies and never prints a token. `credential` writes the gateway token "
+            "only into ~/.trinity-cli/muse-credential (mode 600); `--backend api` uses that file."
+        ),
         epilog=(
             "examples:\n"
             "  muse-web-cli login\n"
@@ -54,8 +58,10 @@ def build_parser() -> argparse.ArgumentParser:
             "Exit 0 ok.\n"
             "Exit 2 setup: browser_down, session_expired, region_blocked, profile_busy, credential_permissions.\n"
             "Exit 3 page: ui_changed, timeout.\n"
-            "Exit 4 unsupported: the credential file is missing, or both vm_id and endpoints are empty.\n"
-            "Point --backend api at ~/.trinity-cli/muse-credential (mode 600) with base_url, auth.type, auth.token, vm_id."
+            "Exit 4 unsupported (--backend api only): the credential file is missing, or it has no vm_id\n"
+            "  and no endpoint for that command.\n"
+            "--backend api reads ~/.trinity-cli/muse-credential (mode 600): base_url, auth.type, auth.token, vm_id.\n"
+            "Run `muse-web-cli credential` to write it from the logged-in page."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
@@ -102,14 +108,25 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("activity", help="read the activity tab; does not click a row")
     sub.add_parser("memory", help="read MEMORY.md innerText; does not focus or edit it")
     chats = sub.add_parser("chats", help="list chats; with --backend api, create, rename, delete, or switch")
-    chats.add_argument("--create", action="store_true", help="create a chat on the api backend")
-    chats.add_argument("--rename", metavar="SESSION", help="rename a chat on the api backend")
-    chats.add_argument("--delete", metavar="SESSION", help="delete a chat on the api backend")
+    chats.add_argument(
+        "--create",
+        action="store_true",
+        help="create a chat on the api backend; it becomes the switched chat",
+    )
+    chats.add_argument("--rename", metavar="SESSION", help="rename a listed chat on the api backend")
+    chats.add_argument(
+        "--delete",
+        metavar="SESSION",
+        help="delete a listed side chat on the api backend; the main chat is refused",
+    )
     chats.add_argument("--switch", metavar="SESSION", help="switch chat on the api backend; use main for the primary chat")
     chats.add_argument("--title", help="title for --create or --rename")
     sub.add_parser(
         "credential",
-        help="save the gateway credential from the logged-in page; log in first when the session is missing",
+        help=(
+            "write the gateway token from the logged-in page into ~/.trinity-cli/muse-credential "
+            "(mode 600, never printed); log in first when the session is missing"
+        ),
     )
     sub.add_parser("login", help="open a headed window so you can log in; never types credentials")
     start = sub.add_parser("start", help="start dedicated Chrome, or attach if that profile is already running")
@@ -297,6 +314,10 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
         raise ConfigError(
             "瀏覽器後端只讀聊天列表。建、改、刪、切換請加 --backend api，"
             "並在 ~/.trinity-cli/muse-credential 填 base_url、auth.token、vm_id。"
+        )
+    if getattr(args, "session", None):
+        raise ConfigError(
+            "--session 只在 --backend api 有效。瀏覽器後端讀寫的是 Muse 視窗目前開著的那一則。沒有送出。"
         )
 
     def run(page, ready):

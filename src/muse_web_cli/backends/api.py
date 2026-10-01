@@ -17,6 +17,7 @@ from pathlib import Path
 from urllib.parse import urlencode, urlsplit, urlunsplit
 
 from muse_web_cli.model import (
+    EXIT_FOR,
     credential_loose,
     credential_outside_home,
     empty_like,
@@ -351,7 +352,13 @@ class ApiBackend:
         payload.setdefault("error", None)
         payload.setdefault("hint", None)
         if payload["state"] != "ok":
-            return self._shape(kind, payload, text)
+            # Exit 4 is decided here, not by the server, and unknown keys are dropped.
+            state = str(payload["state"])
+            if state not in EXIT_FOR or state == "unsupported":
+                state = "ui_changed"
+            error = payload["error"] if isinstance(payload["error"], str) else None
+            hint = payload["hint"] if isinstance(payload["hint"], str) else None
+            return self._fail(kind, state, safe_text(error) if error else "server reported an error", safe_text(hint) if hint else None, text)
         return self._ok(kind, payload, text)
 
     def _ok(self, kind: str, payload: dict, text: str) -> dict:

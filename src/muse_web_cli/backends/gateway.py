@@ -21,18 +21,19 @@ from muse_web_cli.model import (
     grouped_payload,
     memory_payload,
     messages_payload,
+    norm,
     pending_payload,
-    reply_after,
     reply_text,
     send_payload,
     setup_status,
-    visible_messages,
 )
 from muse_web_cli.output import safe_text
 
 _GATEWAY_REJECTED = "gateway 拒絕這次操作"
 _GATEWAY_HINT = "看 gateway 回的狀態，確認 vm_id 與這項操作。token 不會印出來。"
 _NODE = "muse-web-cli"
+_SNAPSHOT_WINDOW = 20
+_POLL_WINDOW = 50
 _CAPS = [
     "chat_cancel",
     "delta_stream",
@@ -170,19 +171,43 @@ def _public_messages(rows: list) -> list[Message]:
     return found
 
 
-def _new_reply(rows: list, prior_count: int, text: str) -> tuple[str, bool] | None:
-    """A settled assistant reply that appears after the pre-send snapshot."""
-    messages = _public_messages(rows)
-    ready = reply_text(messages, text)
+def _same(before: Message, after: Message, *, growing: bool) -> bool:
+    if before.role != after.role:
+        return False
+    old, new = norm(before.text), norm(after.text)
+    return new.startswith(old) if growing else new == old
+
+
+def _fresh_start(prior: list[Message], rows: list[Message]) -> int | None:
+    """Index in rows of the first message newer than the pre-send window.
+
+    Both reads return only the latest messages, so positions shift once the chat
+    is longer than a window. The windows are lined up by content instead. The
+    last pre-send message may still have been streaming, so it only has to be a
+    prefix. None means the windows do not line up and nothing counts as new.
+    """
+    if not prior:
+        return 0
+    for size in range(len(prior), 0, -1):
+        tail = prior[-size:]
+        starts = range(len(rows) - size + 1) if size == len(prior) else range(1)
+        for start in starts:
+            window = rows[start : start + size]
+            if len(window) == size and all(
+                _same(old, new, growing=index == size - 1) for index, (old, new) in enumerate(zip(tail, window))
+            ):
+                return start + size
+    return None
+
+
+def _new_reply(prior: list, rows: list, text: str) -> tuple[str, bool] | None:
+    """A settled assistant reply to text that was not in the pre-send snapshot."""
+    after = _public_messages(rows)
+    start = _fresh_start(_public_messages(prior), after)
+    if start is None:
+        return None
+    ready = reply_text(after[start:], text)
     if ready is None or not ready[0]:
-        return None
-    tail = reply_after(messages, text)
-    if not tail:
-        return None
-    shown = visible_messages(messages)
-    last = tail[-1]
-    index = next((i for i, item in enumerate(shown) if item is last), None)
-    if index is None or index < prior_count:
         return None
     return ready
 
@@ -249,9 +274,27 @@ def _chat_id(item: dict) -> str | None:
     return None
 
 
+def _primary(rows: list[dict]) -> dict | None:
+    return next((item for item in rows if item.get("is_primary") or item.get("kind") == "main"), None)
+
+
+def _listed(data: dict, session: str | None, *, action: str) -> None:
+    """rename and delete take only an id that chats prints. The main chat is never deleted."""
+    rows = _chat_rows(data)
+    primary = _primary(rows)
+    if action == "delete" and (session == "main" or (primary is not None and _chat_id(primary) == session)):
+        raise GatewayError("ui_changed", "主聊天室不能刪。", "只刪 chats 列出的副聊天室。沒有送出刪除。")
+    if not session or session not in {item_id for item in rows if (item_id := _chat_id(item))}:
+        raise GatewayError(
+            "ui_changed",
+            "找不到這個聊天室。",
+            f"先執行 chats，再用列出的 id --{action}。沒有送出。",
+        )
+
+
 def chats_from(data: dict, *, current: str | None) -> list[dict]:
     parsed = _chat_rows(data)
-    primary = next((item for item in parsed if item.get("is_primary") or item.get("kind") == "main"), None)
+    primary = _primary(parsed)
     ordered = []
     if primary is not None:
         ordered.append(primary)
@@ -414,7 +457,7 @@ class MuseGateway:
         chosen = self._pick(session)
         prior: list = []
         if wait:
-            snap = self.messages(20, session=chosen or "main")
+            snap = self.messages(_SNAPSHOT_WINDOW, session=chosen or "main")
             if snap.get("state") != "ok" or not isinstance(snap.get("messages"), list):
                 return send_payload(
                     backend="api",
@@ -446,14 +489,20 @@ class MuseGateway:
         gap = 0.2
         while time.monotonic() - started < timeout:
             remaining = timeout - (time.monotonic() - started)
-            polled = self.messages(20, session=chosen or "main")
-            if polled.get("state") != "ok":
-                first["state"] = str(polled.get("state") or "ui_changed")
+            polled = self.messages(_POLL_WINDOW, session=chosen or "main")
+            state = str(polled.get("state") or "ui_changed")
+            if state == "timeout" and time.monotonic() - started < timeout:
+                # A long reply can keep the send stream quiet past timeout_s.
+                self.sleep(min(gap, max(0.0, timeout - (time.monotonic() - started))))
+                gap = min(gap * 2, 2.0)
+                continue
+            if state != "ok":
+                first["state"] = state
                 first["error"] = polled.get("error")
-                first["hint"] = "沒有再送一次" if first["state"] == "timeout" else polled.get("hint")
+                first["hint"] = "沒有再送一次" if state == "timeout" else polled.get("hint")
                 return first
             rows = polled.get("messages") if isinstance(polled.get("messages"), list) else []
-            ready = _new_reply(rows, len(prior), text)
+            ready = _new_reply(prior, rows, text)
             if ready:
                 body, presentation = ready
                 first["reply"] = body
@@ -514,6 +563,7 @@ class MuseGateway:
                 )
                 write_current(self.credential, new_id)
             elif action == "rename":
+                _listed(self._json(DAEMON, "GET", "/api/session/list"), session, action="rename")
                 self._json(
                     DAEMON,
                     "POST",
@@ -521,6 +571,7 @@ class MuseGateway:
                     body={"session_id": session, "title": title or ""},
                 )
             elif action == "delete":
+                _listed(self._json(DAEMON, "GET", "/api/session/list"), session, action="delete")
                 self._json(
                     DAEMON,
                     "POST",

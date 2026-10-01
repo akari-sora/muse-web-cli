@@ -147,7 +147,7 @@ class CdpPage:
         if not self._draft_matches(text):
             return
         self.page.locator(COMPOSER).first.focus()
-        self.page.keyboard.press("Meta+A")
+        self.page.keyboard.press("ControlOrMeta+A")
         self.page.keyboard.press("Backspace")
 
     def press_enter(self) -> None:
