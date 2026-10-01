@@ -10,6 +10,7 @@ from muse_web_cli.selectors import (
     BOT_PHRASES,
     CHAT_CHROME,
     CREDENTIAL_HINT,
+    CREDENTIAL_HINT_WINDOWS,
     EMPTY_SIDE_CHAT,
     KEY_SELECTORS,
     LOGIN_HINT,
@@ -374,9 +375,16 @@ def memory_payload(
     }
 
 
-def unsupported(kind: str, *, backend: str = "api", text: str = "") -> dict:
-    error = API_UNAVAILABLE
-    hint = API_HINT
+def unsupported(
+    kind: str,
+    *,
+    backend: str = "api",
+    text: str = "",
+    error: str | None = None,
+    hint: str | None = None,
+) -> dict:
+    error = API_UNAVAILABLE if error is None else error
+    hint = API_HINT if hint is None else hint
     if kind == "status":
         return _status("unsupported", error=error, hint=hint, backend=backend)
     if kind == "messages":
@@ -407,12 +415,19 @@ def credential_missing() -> dict:
     )
 
 
-def credential_loose() -> dict:
+def credential_loose(*, error: str | None = None, hint: str | None = None) -> dict:
     return setup_status(
         "credential_permissions",
-        "credential file must be mode 600",
-        CREDENTIAL_HINT,
+        error or "credential file must be mode 600",
+        CREDENTIAL_HINT if hint is None else hint,
         backend="api",
+    )
+
+
+def credential_outside_home() -> dict:
+    return credential_loose(
+        error="credential file must be inside your home directory",
+        hint=CREDENTIAL_HINT_WINDOWS,
     )
 
 

@@ -6,7 +6,7 @@ from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.cli import main
 from muse_web_cli.errors import PageChanged
 from muse_web_cli.flow import collect_chats
-from muse_web_cli.model import exit_for, shape_chats, unsupported
+from muse_web_cli.model import exit_for, shape_chats
 from muse_web_cli.nav import guard_click, read_chats_flow
 from muse_web_cli.selectors import KEY_SELECTORS, NEW_SIDE_CHAT, SWITCHER
 from tests.fakes import ok_snapshot
@@ -103,10 +103,13 @@ def test_panel_is_closed_after_a_read():
 def test_api_chats_are_unsupported(tmp_path, capsys):
     path = tmp_path / ".trinity-cli" / "muse-credential"
     path.parent.mkdir(parents=True)
-    path.write_text("token-like", encoding="utf-8")
+    path.write_text(
+        json.dumps({"base_url": "https://example.test", "auth": {"type": "bearer", "token": "token-like"}, "endpoints": {}}),
+        encoding="utf-8",
+    )
     path.chmod(0o600)
     payload = ApiBackend(path).chats()
-    assert payload == unsupported("chats")
+    assert payload["state"] == "unsupported"
     assert payload["chats"] == []
     assert exit_for(payload["state"]) == 4
     code = main(["--backend", "api", "--json", "chats"], home=tmp_path)

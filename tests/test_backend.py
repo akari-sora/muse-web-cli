@@ -43,15 +43,15 @@ def test_backend_precedence(tmp_path):
     assert default.autostart is False
 
 
-def test_api_missing_file_is_session_expired(tmp_path):
+def test_api_missing_file_is_unsupported(tmp_path):
     payload = ApiBackend(tmp_path / "muse-credential").status()
-    assert payload["state"] == "session_expired"
-    assert payload["hint"] == "muse-web-cli login"
-    assert exit_for(payload["state"]) == 2
+    assert payload["state"] == "unsupported"
+    assert "no official Muse API" in payload["error"]
+    assert exit_for(payload["state"]) == 4
     assert CANARY not in json.dumps(payload)
 
 
-def test_api_refuses_loose_permissions_and_never_reads(tmp_path, monkeypatch):
+def test_api_refuses_loose_permissions_and_never_reads(tmp_path):
     path = tmp_path / "muse-credential"
     path.write_text(CANARY, encoding="utf-8")
     os.chmod(path, 0o644)
@@ -61,11 +61,7 @@ def test_api_refuses_loose_permissions_and_never_reads(tmp_path, monkeypatch):
     assert CANARY not in json.dumps(loose)
     assert exit_for(loose["state"]) == 2
     os.chmod(path, 0o600)
-
-    def boom(*args, **kwargs):
-        raise AssertionError("credential file was opened")
-
-    monkeypatch.setattr("builtins.open", boom)
+    path.write_text(json.dumps({"base_url": "https://example.test", "auth": {"type": "bearer", "token": CANARY}, "endpoints": {}}), encoding="utf-8")
     backend = ApiBackend(path)
     payloads = [
         backend.status(),
@@ -80,7 +76,7 @@ def test_api_refuses_loose_permissions_and_never_reads(tmp_path, monkeypatch):
     blob = json.dumps(payloads)
     assert CANARY not in blob
     assert all(item["state"] == "unsupported" for item in payloads)
-    assert payloads[0]["error"] == API_UNAVAILABLE
+    assert "no endpoint configured for status" in payloads[0]["error"]
     assert payloads[2]["sent"] is False
 
 
@@ -107,9 +103,9 @@ def test_api_shapes_match_browser_shapes():
 
 def test_cli_api_backend_json(tmp_path, capsys):
     code = main(["status", "--json", "--backend", "api"], home=tmp_path)
-    assert code == 2
+    assert code == 4
     missing = json.loads(capsys.readouterr().out)
-    assert missing["state"] == "session_expired"
+    assert missing["state"] == "unsupported"
     cred = tmp_path / ".trinity-cli" / "muse-credential"
     cred.parent.mkdir(parents=True, exist_ok=True)
     cred.write_text(CANARY, encoding="utf-8")
@@ -131,4 +127,4 @@ def test_cli_help_and_limit(tmp_path, capsys):
 
 def test_cli_version(tmp_path, capsys):
     assert main(["--version"], home=tmp_path) == 0
-    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.1"
+    assert capsys.readouterr().out.strip() == "muse-web-cli 0.1.2"

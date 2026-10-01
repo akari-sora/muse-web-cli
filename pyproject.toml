@@ -1,6 +1,6 @@
 [project]
 name = "muse-web-cli"
-version = "0.1.1"
+version = "0.1.2"
 description = "Drive your own logged-in Meta Muse web app from the terminal."
 readme = "README.md"
 license = { text = "MIT" }

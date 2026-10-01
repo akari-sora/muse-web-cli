@@ -2,52 +2,56 @@
 name: muse-web-cli
 description: >-
   Drive the user's own logged-in Meta Muse web app (muse.ai) with the
-  muse-web-cli command, headed or headless. Use when the user asks to check
-  Muse, read Muse messages, list Muse chats, send a message to Muse, or look at Muse pending
-  approvals, upcoming items, activity, or memory. 用 muse-web-cli 操作使用者自己已登入的
-  Meta Muse：當使用者要查看 Muse、讀 Muse 訊息、列出聊天室、傳訊息給 Muse，或查看核可、近期、動態、記憶時使用。
+  muse-web-cli command, headed or headless, on macOS, Linux, or Windows. Use when
+  the user asks to check Muse, read Muse messages, list Muse chats, send a message
+  to Muse, or look at Muse pending approvals, upcoming items, activity, or memory.
+  用 muse-web-cli 操作使用者自己已登入的 Meta Muse：當使用者要查看 Muse、讀 Muse 訊息、列出聊天室、傳訊息給 Muse，或查看核可、近期、動態、記憶時使用。
   The command is muse-web-cli, never muse. 指令是 muse-web-cli，不是 muse。
 ---
 
-# Muse 網頁
+# Muse web
 
-用 `muse-web-cli` 操作使用者自己已登入的 Muse。它不是第二個 Muse。登入留在 `~/.trinity-cli/muse-profile`，工具只驅動頁面。
+`muse-web-cli` drives the user's own logged-in Muse page. It is not a second Muse. The login stays in `~/.trinity-cli/muse-profile`. The tool only drives the page. There is no official public Muse API.
 
-回覆使用使用者這則訊息的語言。
+Reply in the language of the user's message.
 
-## 步驟
+For cross-agent tasks (ask all three, hand off, digest), use the `trinity-cli` skill.
 
-1. 先跑 `muse-web-cli --json --autostart status`（大約數秒）。PATH 沒有時用 `~/.local/bin/muse-web-cli`。
-2. 結束碼 2 且 `state` 是 `browser_down`：再跑一次並保留 `--autostart`。若是 `session_expired`，請使用者執行 `muse-web-cli login`（一定是有視窗的）。無頭模式碰到人機驗證時也是這條。工具不會輸入帳號密碼。
-3. 結束碼 3 且 `state` 是 `ui_changed`：頁面結構變了，不要亂點，把 `missing` 裡的名稱告訴使用者。
-4. 使用者要看訊息才跑 `messages`。要傳訊息才跑 `send`。傳的時候加 `--wait`，逾時不要再送一次。
-5. `pending`、`upcoming`、`activity`、`memory`、`chats` 都是唯讀。`chats` 只列出主聊天室和副聊天室，不開新副聊天室，也不會切換聊天。
+## Steps
 
-## 指令
+1. Run `muse-web-cli --json --autostart status`. If it is not on PATH, use `~/.local/bin/muse-web-cli`.
+2. Exit 2 and `browser_down`: run it again with `--autostart`, or `muse-web-cli start --headless`. Exit 2 and `session_expired`: ask the user to run headed `muse-web-cli login`. A headless bot check uses the same hint. The tool never types credentials. On Linux without a display, login needs a desktop session or `xvfb-run`.
+3. Exit 2 and `profile_busy`: one Chrome already holds the profile. Do not start a second one. Exit 2 and `region_blocked`: stop; the tool cannot bypass a region wall. Exit 2 and `credential_permissions`: on macOS/Linux run `chmod 600 ~/.trinity-cli/muse-credential`; on Windows the file must be a regular file under the user home.
+4. Exit 3 and `ui_changed`: run `selftest` and report the names in `missing`. Do not click around the page. Exit 3 and `timeout`: do not send again.
+5. Exit 4 and `unsupported`: the api backend needs a user-supplied official credential (`base_url`, `bearer` or header auth, `endpoints`, `timeout_s`) and otherwise returns unsupported. Keep using `--backend browser`.
+6. Run `messages` only to read, and `send` only when the user asked to send. Use `send --wait --timeout 120`. A timeout never resends.
+7. `pending`, `upcoming`, `activity`, `memory`, and `chats` are read-only. `chats` lists the main chat and side chats. It does not create a side chat and does not switch chats. `messages` and `send` use whichever chat is already current.
 
-`--json` 可放在指令前或後。預設後端是 `browser`。不要依後端寫分支；api 後端目前每個能力都是 `unsupported`（結束碼 4）。
+## Commands
 
-- `status` — 工作階段、待核可數量、最新助理訊息是不是卡片
-- `messages --limit N` — 由舊到新，上限 100
-- `send --wait --timeout 120 -- TEXT` — insertText 與 Enter，只送一次
+`--json`, `--port` (default 9333, range 1-65535), `--backend` (`browser` or `api`, default `browser`), `--autostart` (default off), and `--chrome` may appear before or after the command. Precedence is flag, then environment, then `~/.trinity-cli/muse-web-cli.json`, then default. Do not branch on backend. The api backend needs a user-supplied official credential; otherwise it returns `unsupported`.
+
+- `status` — session, pending count, whether the latest assistant message is a card
+- `messages --limit N` — oldest to newest; default 20, minimum 1, values above 100 are capped at 100
+- `send --wait --timeout 120 -- TEXT` — insertText and Enter once; `--wait` defaults off; `--timeout` defaults to 120 and must be > 0
 - `pending` / `upcoming` / `activity` / `memory` / `chats`
-- `login` / `start` / `start --headed` / `stop` / `selftest`
+- `login` / `start` / `start --headed` / `start --headless` / `stop` / `selftest`
 
-`start` 預設無頭。設定檔已有 Chrome 時直接接上，不開第二個。`stop` 只關這個工具自己啟動的進程。
+`start` defaults to headless. If Chrome is already using the profile, attach; do not launch a second process. `stop` stops only the process this tool started. `selftest` clicks nothing and requires the chat switcher.
 
-## 結束碼
+## Exit codes
 
-- 0：成功
-- 2：`browser_down`、`session_expired`、`region_blocked`、`profile_busy`、`credential_permissions`
-- 3：`ui_changed`、`timeout`
-- 4：`unsupported`
+- 0: ok
+- 2: `browser_down`, `session_expired`, `region_blocked`, `profile_busy`, `credential_permissions`
+- 3: `ui_changed`, `timeout`
+- 4: `unsupported`
 
-## 安全限制
+## Safety
 
-- 不要讀、存或印出 cookie、token、CSRF，也不要自己呼叫 muse.ai 的 HTTP API。
-- 不要點設定、連接器、邀請、附加檔案、新的側邊聊天、記憶工具列、核可或拒絕。
-- 記憶體只讀。不要聚焦，不要打字進去。
-- 不要請 Muse 刪檔或執行破壞性指令（例如 rm -rf）。
-- 不要請 Muse 傳訊息給任何人（Telegram、email、Slack、WhatsApp）。
-- 不要請 Muse 購買，或變更帳號與設定。
-- 測試訊息要短，並標明是 trinity 測試。使用者沒有要求時，不要主動傳訊息。
+- Do not read, store, or print cookies, tokens, or CSRF, and do not call Muse over HTTP yourself.
+- Do not click settings, connectors, invites, attach, a new side chat, the memory toolbar, or approve/reject.
+- Memory is read-only. Do not focus it or type into it.
+- Do not ask Muse to delete files or run destructive commands.
+- Do not ask Muse to message anyone.
+- Do not ask Muse to buy anything or change the account.
+- Test messages stay short and say they are a test. Do not send unless the user asked.

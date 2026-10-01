@@ -162,7 +162,14 @@ MEMORY_SECTIONS = ("Facts", "Preferences", "Commitments")
 
 MUSE_URL = "https://muse.ai/"
 LOGIN_HINT = "muse-web-cli login"
-API_UNAVAILABLE = "api backend: not available yet (no supported Muse API)"
-API_HINT = "A future api backend will follow ~/.trinity-cli-infra/muse-api-research.md"
+API_UNAVAILABLE = (
+    "no official Muse API exists; place a sanctioned credential at "
+    "~/.trinity-cli/muse-credential or use the browser backend"
+)
+API_HINT = (
+    "Use --backend browser, or place a sanctioned credential at "
+    "~/.trinity-cli/muse-credential. This tool never extracts cookies or tokens."
+)
 CREDENTIAL_HINT = "chmod 600 ~/.trinity-cli/muse-credential"
+CREDENTIAL_HINT_WINDOWS = "put ~/.trinity-cli/muse-credential in your home directory"
 START_HINT = "muse-web-cli start --headless"

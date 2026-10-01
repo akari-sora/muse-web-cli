@@ -19,6 +19,7 @@ stages:
 
 test:
   stage: test
+  tags: [grok-box, ondemand, muse-web-cli]
   image: python:3.12-slim
   variables:
     PIP_CACHE_DIR: "$CI_PROJECT_DIR/.cache/pip"
@@ -32,10 +33,32 @@ test:
     - pip install "pytest>=8"
     - python -m pytest -q
 
+test-windows:
+  stage: test
+  tags: [saas-windows-medium-amd64]
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+    - if: $CI_COMMIT_TAG
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
+    UV_CACHE_DIR: "$CI_PROJECT_DIR\\.uv-cache"
+  cache:
+    key: uv-windows
+    paths:
+      - .uv-cache
+  script:
+    - iex (irm https://astral.sh/uv/install.ps1)
+    - $env:Path = "$env:USERPROFILE\.local\bin;$env:Path"
+    - uv python install 3.12
+    - uv run --python 3.12 --group dev pytest -q
+
 release:
   stage: release
+  tags: [grok-box, ondemand, muse-web-cli]
   image: python:3.12-slim
   interruptible: false
+  variables:
+    PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1"
   rules:
     - if: $CI_COMMIT_TAG
   script:
@@ -83,7 +106,29 @@ release:
       print("\n".join(body).strip() or fallback)
       PY
       )"
-      if ! release-cli create --name "$CI_COMMIT_TAG" --tag-name "$CI_COMMIT_TAG" --description "$notes"; then
+      pip install build
+      python -m build
+      python3 - <<'PY'
+      import os, pathlib, urllib.request
+      tag = os.environ["CI_COMMIT_TAG"]
+      base = os.environ["CI_API_V4_URL"] + "/projects/" + os.environ["CI_PROJECT_ID"] + "/packages/generic/muse-web-cli/" + tag + "/"
+      for path in pathlib.Path("dist").iterdir():
+          request = urllib.request.Request(
+              base + path.name,
+              data=path.read_bytes(),
+              method="PUT",
+              headers={"JOB-TOKEN": os.environ["CI_JOB_TOKEN"]},
+          )
+          with urllib.request.urlopen(request) as response:
+              print(path.name, response.status)
+      PY
+      asset_args=()
+      for f in dist/*; do
+        name="$(basename "$f")"
+        url="${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/muse-web-cli/${CI_COMMIT_TAG}/${name}"
+        asset_args+=(--assets-link "{\"name\":\"${name}\",\"url\":\"${url}\",\"link_type\":\"package\"}")
+      done
+      if ! release-cli create --name "$CI_COMMIT_TAG" --tag-name "$CI_COMMIT_TAG" --description "$notes" "${asset_args[@]}"; then
         status="$(python3 - <<'PY'
       import os, urllib.error, urllib.parse, urllib.request
       tag = urllib.parse.quote(os.environ["CI_COMMIT_TAG"], safe="")

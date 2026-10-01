@@ -42,45 +42,91 @@ def build_parser() -> argparse.ArgumentParser:
         epilog=(
             "examples:\n"
             "  muse-web-cli login\n"
+            "  muse-web-cli selftest\n"
             "  muse-web-cli start --headless\n"
-            "  muse-web-cli --autostart status\n"
+            "  muse-web-cli --json --autostart status\n"
             "  muse-web-cli --json messages --limit 5\n"
-            "  muse-web-cli send --wait -- \"trinity 測試\"\n"
-            "--json, --port, --backend, and --autostart may appear before or after the command.\n"
-            "Exit 0 ok, 2 setup (browser_down, session_expired, region_blocked), "
-            "3 page (ui_changed, timeout), 4 unsupported."
+            "  muse-web-cli send --wait --timeout 120 -- \"text\"\n"
+            "\n"
+            "Global flags may appear before or after the command.\n"
+            "Exit 0 ok.\n"
+            "Exit 2 setup: browser_down, session_expired, region_blocked, profile_busy, credential_permissions.\n"
+            "Exit 3 page: ui_changed, timeout.\n"
+            "Exit 4 unsupported."
         ),
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
+    parser.add_argument("--json", action="store_true", help="print one JSON object (default: off)")
+    parser.add_argument("--port", metavar="PORT", help="Chrome DevTools port (default: 9333, range 1-65535)")
+    parser.add_argument(
+        "--backend",
+        choices=("browser", "api"),
+        help="which backend to use (default: browser)",
+    )
+    parser.add_argument(
+        "--autostart",
+        action="store_true",
+        help="start headless Chrome when nothing is listening (default: off)",
+    )
+    parser.add_argument(
+        "--chrome",
+        metavar="PATH",
+        help="Chrome executable (default: discover per OS; overrides MUSE_WEB_CHROME)",
+    )
     sub = parser.add_subparsers(dest="command")
-    sub.add_parser("status", help="browser, session, pending count, and whether the latest reply is a card")
+    sub.add_parser("status", help="session, pending count, and whether the latest reply is a card")
     messages = sub.add_parser("messages", help="recent messages, oldest to newest")
-    messages.add_argument("--limit", type=int, default=20, help="how many messages to return, capped at 100")
-    send = sub.add_parser("send", help="insertText + Enter. --wait blocks until the reply settles")
-    send.add_argument("text", help="message text")
-    send.add_argument("--wait", action="store_true", help="wait for the assistant reply")
-    send.add_argument("--timeout", type=float, default=120, help="seconds for one attempt; a timeout never resends")
+    messages.add_argument(
+        "--limit",
+        type=int,
+        default=20,
+        help="how many messages to return (default: 20, minimum 1, values above 100 are capped at 100)",
+    )
+    send = sub.add_parser("send", help="type with insertText and press Enter once")
+    send.add_argument("text", help="message text; put -- before it if it starts with a dash")
+    send.add_argument("--wait", action="store_true", help="wait for the assistant reply (default: off)")
+    send.add_argument(
+        "--timeout",
+        type=float,
+        default=120,
+        help="seconds for that one wait (default: 120, must be > 0); a timeout never resends",
+    )
     sub.add_parser("pending", help="read pending approvals; does not approve or reject")
-    sub.add_parser("upcoming", help="read the upcoming tab")
-    sub.add_parser("activity", help="read the activity tab")
+    sub.add_parser("upcoming", help="read the upcoming tab; does not click a row")
+    sub.add_parser("activity", help="read the activity tab; does not click a row")
     sub.add_parser("memory", help="read MEMORY.md innerText; does not focus or edit it")
     sub.add_parser("chats", help="list the main chat and side chats; does not open or create one")
-    sub.add_parser("login", help="open a headed Muse window and wait for you to log in")
-    start = sub.add_parser("start", help="start the dedicated Chrome if it is not already running")
-    start.add_argument("--headed", action="store_true", help="show the window")
-    start.add_argument("--headless", action="store_true", help="start with --headless=new (the default)")
-    sub.add_parser("stop", help="stop only the Chrome this tool started")
-    sub.add_parser("selftest", help="check key selectors; clicks nothing")
+    sub.add_parser("login", help="open a headed window so you can log in; never types credentials")
+    start = sub.add_parser("start", help="start dedicated Chrome, or attach if that profile is already running")
+    start.add_argument("--headed", action="store_true", help="show the window (default: headless)")
+    start.add_argument("--headless", action="store_true", help="start with --headless=new (default when --headed is omitted)")
+    sub.add_parser("stop", help="stop only the Chrome process this tool started")
+    sub.add_parser("selftest", help="check that key selectors exist; clicks nothing")
     return parser
 
 
-def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bool | None]:
+def configure_stdio() -> None:
+    """Windows consoles default to cp950/cp1252. zh-TW output must not crash them."""
+    if sys.platform != "win32":
+        return
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (OSError, ValueError):
+            continue
+
+
+def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bool | None, object]:
     cleaned: list[str] = []
     as_json = False
     port = None
     backend = None
     autostart = None
+    chrome = None
     index = 0
     while index < len(argv):
         item = argv[index]
@@ -112,9 +158,19 @@ def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bo
             backend = argv[index + 1]
             index += 2
             continue
+        if item == "--chrome" or item.startswith("--chrome="):
+            if item.startswith("--chrome="):
+                chrome = item.split("=", 1)[1]
+                index += 1
+                continue
+            if index + 1 >= len(argv):
+                raise ConfigError("missing value for --chrome")
+            chrome = argv[index + 1]
+            index += 2
+            continue
         cleaned.append(item)
         index += 1
-    return cleaned, as_json, port, backend, autostart
+    return cleaned, as_json, port, backend, autostart, chrome
 
 
 def _lifecycle(ready: dict, *, logged_in=None, hint=None, action=None) -> dict:
@@ -262,14 +318,16 @@ def _run_lifecycle(settings: Settings, args: argparse.Namespace) -> dict:
 
 def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
     os.environ.setdefault("PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD", "1")
+    configure_stdio()
     raw = list(sys.argv[1:] if argv is None else argv)
     try:
-        cleaned, as_json, port, backend, autostart = _split_globals(raw)
+        cleaned, as_json, port, backend, autostart, chrome = _split_globals(raw)
         settings = resolve_settings(
             home=home,
             port=port,
             backend=backend,
             autostart=autostart,
+            chrome=chrome,
             environ=os.environ,
         )
     except ConfigError as exc:

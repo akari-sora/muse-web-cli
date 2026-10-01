@@ -9,6 +9,7 @@ import shutil
 import signal
 import socket
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from contextlib import contextmanager
@@ -18,14 +19,18 @@ from pathlib import Path
 from muse_web_cli.config import Paths
 from muse_web_cli.selectors import MUSE_URL
 
-CHROME_CANDIDATES = (
+MAC_CHROME = (
     Path("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
     Path("/Applications/Chromium.app/Contents/MacOS/Chromium"),
+)
+LINUX_CHROME = (
     Path("/usr/bin/google-chrome"),
     Path("/usr/bin/google-chrome-stable"),
     Path("/usr/bin/chromium"),
     Path("/usr/bin/chromium-browser"),
 )
+LINUX_NAMES = ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser")
+# Edge is intentionally not a candidate.
 
 
 @dataclass(frozen=True)
@@ -34,16 +39,47 @@ class Proc:
     command: str
 
 
-def discover_chrome(explicit: str | None = None) -> Path | None:
+def _usable(path: Path) -> bool:
+    return path.is_file() and os.access(path, os.X_OK)
+
+
+def windows_chrome_candidates(environ: dict | None = None) -> list[Path]:
+    env = os.environ if environ is None else environ
+    found: list[Path] = []
+    for key in ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA"):
+        root = env.get(key)
+        if root:
+            found.append(Path(root) / "Google" / "Chrome" / "Application" / "chrome.exe")
+    return found
+
+
+def discover_chrome(
+    explicit: str | None = None,
+    *,
+    platform: str | None = None,
+    environ: dict | None = None,
+    which=shutil.which,
+) -> Path | None:
+    """Find Chrome. `explicit` is the --chrome flag or MUSE_WEB_CHROME value."""
+    system = platform or sys.platform
     if explicit:
         path = Path(explicit)
-        return path if path.is_file() and os.access(path, os.X_OK) else None
-    for candidate in CHROME_CANDIDATES:
-        if candidate.is_file() and os.access(candidate, os.X_OK):
+        return path if _usable(path) else None
+    if system == "win32":
+        candidates = windows_chrome_candidates(environ)
+        names = ("chrome", "chrome.exe")
+    elif system == "darwin":
+        candidates = list(MAC_CHROME)
+        names = ()
+    else:
+        candidates = list(LINUX_CHROME)
+        names = LINUX_NAMES
+    for candidate in candidates:
+        if _usable(candidate):
             return candidate
-    for name in ("google-chrome", "google-chrome-stable", "chromium", "chromium-browser"):
-        found = shutil.which(name)
-        if found:
+    for name in names:
+        found = which(name)
+        if found and _usable(Path(found)):
             return Path(found)
     return None
 
@@ -67,15 +103,34 @@ def launch_argv(chrome: Path, profile: Path, port: int, *, headless: bool) -> li
     return argv
 
 
+def _profile_arg(command: str) -> str | None:
+    match = re.search(r"--user-data-dir=(?:\"([^\"]+)\"|'([^']+)'|(\S+))", command)
+    if not match:
+        return None
+    return next(group for group in match.groups() if group)
+
+
+def _same_profile(command: str, profile: Path) -> bool:
+    found = _profile_arg(command)
+    if not found:
+        return False
+    return os.path.normcase(os.path.normpath(found)) == os.path.normcase(os.path.normpath(str(profile)))
+
+
+def _exe_name(command: str) -> str:
+    exe = command.split(" --", 1)[0].strip().strip('"')
+    name = Path(exe).name.lower()
+    return name[:-4] if name.endswith(".exe") else name
+
+
 def is_main_chrome(proc: Proc, profile: Path) -> bool:
     command = proc.command
-    if "--type=" in command or "Helper" in command:
+    name = _exe_name(command)
+    if "--type=" in command or "Helper" in command or "helper" in name:
         return False
-    if f"--user-data-dir={profile}" not in command:
+    if not _same_profile(command, profile):
         return False
-    exe = command.split(" --", 1)[0]
-    base = exe.rsplit("/", 1)[-1]
-    return "Chrome" in exe or "Chromium" in exe or base in {"chrome", "chromium"}
+    return "chrome" in name or "chromium" in name
 
 
 def debug_port(command: str) -> int | None:
@@ -89,7 +144,37 @@ def command_is_headless(command: str) -> bool:
     return "--headless" in command
 
 
+def parse_windows_process_json(raw: str) -> list[Proc]:
+    try:
+        data = json.loads(raw) if raw.strip() else []
+    except json.JSONDecodeError:
+        return []
+    rows = data if isinstance(data, list) else [data]
+    found: list[Proc] = []
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        pid = row.get("ProcessId")
+        command = row.get("CommandLine")
+        if isinstance(pid, int) and isinstance(command, str) and command.strip():
+            found.append(Proc(pid, command.strip()))
+    return found
+
+
 def list_processes() -> list[Proc]:
+    if sys.platform == "win32":
+        raw = subprocess.check_output(
+            [
+                "powershell",
+                "-NoProfile",
+                "-Command",
+                "Get-CimInstance Win32_Process | Select-Object ProcessId,CommandLine | ConvertTo-Json -Compress",
+            ],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        return parse_windows_process_json(raw)
     raw = subprocess.check_output(["ps", "-ax", "-o", "pid=,command="], text=True)
     found: list[Proc] = []
     for line in raw.splitlines():
@@ -120,17 +205,35 @@ def wait_until_port(port: int, timeout: float = 20.0) -> bool:
 
 
 def spawn(argv: list[str]) -> int:
-    proc = subprocess.Popen(
-        argv,
-        stdin=subprocess.DEVNULL,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-        start_new_session=True,
-    )
+    kwargs: dict = {
+        "stdin": subprocess.DEVNULL,
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.DEVNULL,
+    }
+    if sys.platform == "win32":
+        kwargs["creationflags"] = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0x200) | getattr(
+            subprocess, "DETACHED_PROCESS", 0x8
+        )
+    else:
+        kwargs["start_new_session"] = True
+    proc = subprocess.Popen(argv, **kwargs)
     return proc.pid
 
 
+def _windows_alive(pid: int) -> bool:
+    import ctypes
+
+    access = 0x1000
+    handle = ctypes.windll.kernel32.OpenProcess(access, False, pid)
+    if not handle:
+        return False
+    ctypes.windll.kernel32.CloseHandle(handle)
+    return True
+
+
 def alive(pid: int) -> bool:
+    if sys.platform == "win32":
+        return _windows_alive(pid)
     try:
         os.kill(pid, 0)
     except OSError:
@@ -138,8 +241,23 @@ def alive(pid: int) -> bool:
     return True
 
 
+def _taskkill(pid: int, *, force: bool) -> None:
+    argv = ["taskkill", "/PID", str(pid), "/T"]
+    if force:
+        argv.append("/F")
+    subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+
+
 def kill_pid(pid: int) -> None:
-    """Signal one pid. Callers must already have proved it is the tracked Chrome."""
+    """Stop one process tree. Callers must already have proved it is the tracked Chrome."""
+    if sys.platform == "win32":
+        _taskkill(pid, force=False)
+        for _ in range(20):
+            if not alive(pid):
+                return
+            time.sleep(0.25)
+        _taskkill(pid, force=True)
+        return
     os.kill(pid, signal.SIGTERM)
     for _ in range(20):
         if not alive(pid):
@@ -171,17 +289,73 @@ def clear_state(path: Path) -> None:
         return
 
 
+def profile_lock_held(profile: Path, *, platform: str | None = None, alive_fn: Callable[[int], bool] | None = None) -> bool:
+    """True when another Chrome still holds this profile's lock."""
+    system = platform or sys.platform
+    check = alive if alive_fn is None else alive_fn
+    if system == "win32":
+        return _windows_lockfile_held(profile / "lockfile")
+    return _posix_singleton_held(profile / "SingletonLock", check)
+
+
+def _posix_singleton_held(lock: Path, alive_fn: Callable[[int], bool]) -> bool:
+    try:
+        target = os.readlink(lock)
+    except OSError:
+        return False
+    pid_text = target.rsplit("-", 1)[-1]
+    if not pid_text.isdigit():
+        return False
+    return alive_fn(int(pid_text))
+
+
+def _windows_lockfile_held(lock: Path) -> bool:
+    if not lock.is_file():
+        return False
+    import msvcrt
+
+    try:
+        handle = lock.open("r+b")
+    except OSError:
+        return True
+    with handle:
+        try:
+            msvcrt.locking(handle.fileno(), msvcrt.LK_NBLCK, 1)
+        except OSError:
+            return True
+        msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+    return False
+
+
+def headed_needs_display(headless: bool, platform: str, environ: dict) -> bool:
+    if headless or platform in {"win32", "darwin"}:
+        return False
+    return not environ.get("DISPLAY") and not environ.get("WAYLAND_DISPLAY")
+
+
 @contextmanager
 def file_lock(path: Path):
-    import fcntl
-
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-        try:
-            yield
-        finally:
-            fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+    with path.open("a+", encoding="utf-8") as handle:
+        if sys.platform == "win32":
+            import msvcrt
+
+            if handle.seek(0, os.SEEK_END) == 0:
+                handle.write(" ")
+                handle.flush()
+            msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
+            try:
+                yield
+            finally:
+                msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
+            try:
+                yield
+            finally:
+                fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
 
 
 def _result(
@@ -230,6 +404,8 @@ def ensure(
     autostart: bool,
     chrome: Path | None,
     port: int,
+    platform: str | None = None,
+    environ: dict | None = None,
 ) -> dict:
     """Connect to the profile's Chrome, or launch one. Never launches a second."""
     mains = [proc for proc in procs if is_main_chrome(proc, paths.profile)]
@@ -296,6 +472,20 @@ def ensure(
             hint=None,
         )
 
+    system = platform or sys.platform
+    env = os.environ if environ is None else environ
+    if not force_launch and profile_lock_held(paths.profile, platform=system):
+        return _result(
+            state="profile_busy",
+            action="not_tracked",
+            port=port,
+            headless=None,
+            tracked=False,
+            pid=None,
+            error="dedicated Chrome profile is locked",
+            hint="Quit that Muse window, then run muse-web-cli start --headless",
+        )
+
     launch = mode in {"start", "login"} or (mode == "use" and autostart)
     if not launch:
         return _result(
@@ -320,6 +510,17 @@ def ensure(
             hint="Install Google Chrome, or set MUSE_WEB_CHROME",
         )
     want_headless = True if mode == "use" else (False if mode == "login" else headless)
+    if headed_needs_display(want_headless, system, env):
+        return _result(
+            state="browser_down",
+            action="not_tracked",
+            port=port,
+            headless=False,
+            tracked=False,
+            pid=None,
+            error="headed Chrome needs a display",
+            hint="Log in on a desktop session, or run xvfb-run muse-web-cli login. Do not copy cookies.",
+        )
     argv = launch_argv(chrome, paths.profile, port, headless=want_headless)
     pid = spawn_fn(argv)
     if not wait_ready(port):

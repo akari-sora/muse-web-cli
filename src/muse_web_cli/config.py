@@ -99,6 +99,7 @@ def resolve_settings(
     backend: object = None,
     autostart: bool | None = None,
     headless: object = None,
+    chrome: object = None,
     environ: dict | None = None,
 ) -> Settings:
     """CLI flag, then environment, then config file, then default."""
@@ -118,7 +119,8 @@ def resolve_settings(
         headless_value: object = env.get("MUSE_WEB_HEADLESS", file.get("headless"))
     else:
         headless_value = headless
-    chrome = env.get("MUSE_WEB_CHROME") or file.get("chrome") or None
+    if chrome is None:
+        chrome = env.get("MUSE_WEB_CHROME") or file.get("chrome") or None
     if isinstance(chrome, str) and not chrome.strip():
         chrome = None
     return Settings(
