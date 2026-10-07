@@ -1,5 +1,13 @@
-<!-- Previous Muse chat switcher: a dropdown trigger, closed until clicked.
-     Titles here are stand-ins, not copied from a logged-in page. -->
+<!-- Previous Muse chat switcher: a dropdown trigger.
+     Titles here are stand-ins, not copied from a logged-in page.
+     The list stays in the markup so selectors can be read; the tool does not click it open. -->
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head><title>Muse</title></head>
+<body>
+<div role="log" aria-label="聊天訊息"></div>
+<textarea aria-label="傳送訊息"></textarea>
+<div role="button" data-hatch-avatar-interaction aria-label="Muse"></div>
 <button type="button" data-testid="hatch-chat-switcher-trigger" aria-haspopup="listbox" aria-expanded="false">
   <span>聊天室</span>
   <span>假主對話</span>
@@ -11,3 +19,5 @@
     <button type="button" data-testid="hatch-side-chats-options" aria-label="副聊天室選項"></button>
   </div>
 </div>
+</body>
+</html>

@@ -146,7 +146,7 @@ muse-web-cli --json pending
 - `upcoming` — 只讀近期，不點列。`muse-web-cli upcoming`
 - `activity` — 只讀動態，不點列。`muse-web-cli activity`
 - `memory` — 只讀 MEMORY.md 的 `innerText`，不聚焦、不打字。`muse-web-cli memory`
-- `chats` — 列出主聊天室與副聊天室，然後關回原來的畫面。不點「新副聊天室」，也不會打開任何一則。`muse-web-cli chats`
+- `chats` — 列出已經打開的側欄裡的主聊天室與副聊天室。側欄關著時不點開關，`state` 是 `ui_changed`，hint 是「請在 Muse 打開側欄後重試」。不點「新副聊天室」，也不會打開任何一則。新版介面的主標題可能是 null。`muse-web-cli chats`
 - `chats --create [--title T]`、`--rename ID --title T`、`--delete ID`、`--switch ID|main` — 只在 `--backend api`。`ID` 是 `chats` 列出的 `session_id`，四個動作用同一套 id。`--create` 會把新聊天室設成目前這一則。`--delete` 不接受主聊天室；`--rename`、`--delete` 碰到沒列出的 id 會拒絕，不送出。`muse-web-cli --backend api chats --switch main`
 - `credential` — 從已登入的頁面取得 gateway token，只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。沒登入會先走 `login`。`muse-web-cli credential`
 - `login` — 開有視窗的 Chrome，等你登入。`muse-web-cli login`
@@ -163,7 +163,7 @@ muse-web-cli --json pending
 - `upcoming`：`backend` `state` `count` `groups` `error` `hint`。group 是 `title` 與 `items`（`name` `time`）
 - `activity`：同樣有 `groups`，item 是 `title` `detail` `time`
 - `memory`：`backend` `state` `chars` `sections` `text` `error` `hint`
-- `chats`：`backend` `state` `count` `chats` `error` `hint`。每一則是 `title` `is_current` `kind`（`main` 或 `side`），`--backend api` 另有 `session_id`。沒有副聊天室時 `count` 是主聊天室那一則
+- `chats`：`backend` `state` `count` `chats` `error` `hint`。每一則是 `title` `is_current` `kind`（`main` 或 `side`），`--backend api` 另有 `session_id`。沒有副聊天室時 `count` 是主聊天室那一則。新版介面的 `title` 可能是 null
 - `credential`：`backend` `state` `action` `wrote` `logged_in` `fields` `error` `hint`。`fields` 只寫每個欄位有沒有值（`true`／`false`），沒有 token 本身
 - `login` / `start` / `stop`：`backend` `state` `action` `port` `headless` `tracked` `logged_in` `error` `hint`
 - `selftest`：`status` 的鍵，再加上 `present`
@@ -409,7 +409,7 @@ Global flags may appear before or after the command:
 - `upcoming` — read the upcoming tab. It does not click a row. `muse-web-cli upcoming`
 - `activity` — read the activity tab. It does not click a row. `muse-web-cli activity`
 - `memory` — read MEMORY.md `innerText`. It does not focus or type. `muse-web-cli memory`
-- `chats` — list the main chat and any side chats, then restore the previous view. It does not click "新副聊天室" / new side chat, and it does not open a chat. `muse-web-cli chats`
+- `chats` — list the main chat and any side chats already showing in the sidebar. A closed sidebar is not clicked; `state` is `ui_changed` and the hint is「請在 Muse 打開側欄後重試」. It does not click "新副聊天室" / new side chat, and it does not open a chat. On the new shell the main `title` may be null. `muse-web-cli chats`
 - `chats --create [--title T]`, `--rename ID --title T`, `--delete ID`, `--switch ID|main` — `--backend api` only. `ID` is the `session_id` that `chats` lists; all four use the same ids. `--create` makes the new chat the switched one. `--delete` refuses the main chat; `--rename` and `--delete` refuse an id that was not listed and send nothing. `muse-web-cli --backend api chats --switch main`
 - `credential` — get the gateway token from the logged-in page and write it only into `~/.trinity-cli/muse-credential` (mode 600). It never prints it. Runs `login` first when the session is missing. `muse-web-cli credential`
 - `login` — open a headed window so you can log in. `muse-web-cli login`
@@ -426,7 +426,7 @@ Global flags may appear before or after the command:
 - `upcoming`: `backend` `state` `count` `groups` `error` `hint`. A group is `title` plus `items` of `name` `time`
 - `activity`: the same `groups` shape; an item is `title` `detail` `time`
 - `memory`: `backend` `state` `chars` `sections` `text` `error` `hint`
-- `chats`: `backend` `state` `count` `chats` `error` `hint`. Each chat is `title` `is_current` `kind` (`main` or `side`), plus `session_id` on `--backend api`. With no side chats, `count` is the main chat only
+- `chats`: `backend` `state` `count` `chats` `error` `hint`. Each chat is `title` `is_current` `kind` (`main` or `side`), plus `session_id` on `--backend api`. With no side chats, `count` is the main chat only. On the new shell `title` may be null
 - `credential`: `backend` `state` `action` `wrote` `logged_in` `fields` `error` `hint`. `fields` only says whether each field has a value (`true`/`false`); the token itself is never in the output
 - `login` / `start` / `stop`: `backend` `state` `action` `port` `headless` `tracked` `logged_in` `error` `hint`
 - `selftest`: the `status` keys plus `present`

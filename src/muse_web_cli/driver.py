@@ -197,40 +197,22 @@ class CdpPage:
         )
 
     def _side_chats_open(self) -> bool:
-        return self.page.locator(SIDE_CHATS_CONTENT).count() > 0
+        locator = self.page.locator(SIDE_CHATS_CONTENT)
+        try:
+            if locator.count() == 0:
+                return False
+            return bool(locator.first.is_visible())
+        except Exception as exc:
+            raise BrowserDown(safe_text(str(exc))) from exc
 
     def read_chats(self) -> dict:
-        def open_panel() -> None:
-            # Listed order: the dock control that opens the sidebar, then the old dropdown.
-            chosen = None
-            for selector in switcher_selectors():
-                locator = self.page.locator(selector)
-                try:
-                    count = locator.count()
-                except Exception as exc:
-                    raise BrowserDown(safe_text(str(exc))) from exc
-                if count:
-                    chosen = selector
-                    break
-            self.click(chosen or switcher_selectors()[0])
-            self._wait_until(self._side_chats_open, "side_chats")
-
-        def close_panel() -> None:
-            self.page.keyboard.press("Escape")
-            self._wait_until(lambda: not self._side_chats_open(), "side_chats_close")
-
         def read() -> dict:
             data = self._eval(CHATS_JS)
             if not isinstance(data, dict) or not data.get("ok"):
                 raise PageChanged("side_chats")
             return data
 
-        return read_chats_flow(
-            is_open=self._side_chats_open,
-            open_panel=open_panel,
-            close_panel=close_panel,
-            read=read,
-        )
+        return read_chats_flow(is_open=self._side_chats_open, read=read)
 
     def read_memory(self) -> str:
         def panel_open() -> bool:

@@ -10,6 +10,8 @@ from muse_web_cli.selectors import (
     COMPOSER,
     EDITOR_CLOSE,
     MEMORY_FILE,
+    SIDEBAR_CLOSED_ERROR,
+    SIDEBAR_CLOSED_HINT,
     SWITCHER,
     TAB_ACTIVITY,
     TAB_IDENTITY,
@@ -81,21 +83,12 @@ def read_memory_flow(
                 click(original)
 
 
-def read_chats_flow(*, is_open: Callable[[], bool], open_panel: Callable[[], None], close_panel: Callable[[], None], read: Callable[[], dict]) -> dict:
-    """Read the chat list without leaving the sidebar open if it was closed.
+def read_chats_flow(*, is_open: Callable[[], bool], read: Callable[[], dict]) -> dict:
+    """Read the chat list only when the sidebar is already open.
 
-    The new shell shows that list as a sidebar. When the sidebar is already
-    open this does not click it and does not close it. The older dropdown is
-    opened only while it is closed, then closed again.
+    A closed sidebar is not clicked open and is not closed. The caller reports
+    that the list cannot be read.
     """
-    opened = False
     if not is_open():
-        opened = True
-        open_panel()
-    try:
-        if not is_open():
-            raise PageChanged("side_chats")
-        return read()
-    finally:
-        if opened:
-            close_panel()
+        raise PageChanged("side_chats", hint=SIDEBAR_CLOSED_HINT, error=SIDEBAR_CLOSED_ERROR)
+    return read()

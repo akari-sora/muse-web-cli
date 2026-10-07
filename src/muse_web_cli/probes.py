@@ -11,6 +11,8 @@ _MAP = {
     "composer": sel.COMPOSER,
     "switcher": sel.SWITCHER,
     "sideContent": sel.SIDE_CHATS_CONTENT,
+    "sideShell": sel.SIDE_CHATS,
+    "dock": sel.DOCK,
     "avatar": sel.AVATAR_BUTTON,
     "pending_tab": sel.TAB_PENDING,
     "upcoming_tab": sel.TAB_UPCOMING,
@@ -287,19 +289,30 @@ CHATS_JS = f"""
       break;
     }}
   }}
+  const shells = [sel.sideShell, sel.log, sel.dock]
+    .map((part) => (part ? document.querySelector(part) : null))
+    .filter(Boolean);
+  const outsideTitles = [];
+  for (const el of document.querySelectorAll("h1")) {{
+    if (shells.some((node) => node.contains(el))) continue;
+    const bit = norm(el.innerText || el.textContent);
+    if (bit) outsideTitles.push(bit);
+  }}
+  const pageTitle = norm(document.title);
   const content = document.querySelector(sel.sideContent);
-  if (!content) return {{ok: false, mainSpans, rows: []}};
+  if (!content) return {{ok: false, mainSpans, rows: [], pageTitle, outsideTitles}};
   const rows = [];
   for (const row of content.querySelectorAll("button, a, [role='option']")) {{
     if (row.querySelector("input")) continue;
     const aria = row.getAttribute("aria-label") || "";
+    const mark = row.getAttribute("aria-current");
     rows.push({{
       title: norm(row.innerText),
-      current: row.getAttribute("aria-current") === "true" || row.getAttribute("aria-selected") === "true" || row.getAttribute("aria-pressed") === "true",
+      current: mark === "true" || mark === "page" || row.getAttribute("aria-selected") === "true" || row.getAttribute("aria-pressed") === "true",
       options: row.getAttribute("data-testid") === "hatch-side-chats-options" || aria === "副聊天室選項" || aria === "Side chat options",
     }});
   }}
-  return {{ok: true, mainSpans, rows}};
+  return {{ok: true, mainSpans, rows, pageTitle, outsideTitles}};
 }}
 """
 
