@@ -28,20 +28,20 @@ trinity-cli 系列的一部分。Part of the trinity-cli family.
 
 ### 安裝
 
-v0.1.4。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.4`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.5。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.5`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
 muse-web-cli --version
 ```
 
@@ -291,20 +291,20 @@ Supported systems: see [Platforms](#platforms).
 
 ### Install
 
-v0.1.4. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.4`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.5. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.5`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.4"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
 muse-web-cli --version
 ```
 

@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## [0.1.5] - 2026-10-08
 
+- Muse's chat switcher is the dock control for the side-chat sidebar. `selftest` still accepts the old dropdown trigger, and a page with neither reports `ui_changed`. trinity-cli's Muse seat works again.
 - On the new Muse shell, the main chat `title` may be null. `chats` uses a heading outside the sidebar, or `document.title`, and only when that text is not an interface label such as 「聊天室」. The old dropdown's name span is still used when it is there.
 - `chats` does not click the dock link or any control that opens or closes the sidebar. A closed sidebar is `ui_changed` with hint 「請在 Muse 打開側欄後重試」.
 - A side-chat row with `aria-current="page"` counts as the current chat, as well as `aria-current="true"`.
-- Muse's chat switcher is the dock control for the side-chat sidebar. `selftest` still accepts the old dropdown trigger, and a page with neither reports `ui_changed`.
 - A fresh profile that lands on Muse's signed-out page reports `session_expired` with the `muse-web-cli login` hint. It used to say `ui_changed`.
 - `status`, `messages`, and `send` wait up to 8 seconds for a just-started Chrome to render the page before deciding it changed.
 - `--help` and `--version` work even when the config file is broken.
@@ -13,6 +13,7 @@
 - Windows: a profile path with a space matches the running Chrome; PowerShell process output is read as UTF-8; the profile lock waits while another process holds it instead of failing at once.
 - Hints say to rerun `muse-web-cli credential` instead of editing `auth.token` by hand.
 - Docs: disclaimer and terms risk, privacy, platform matrix, and the uninstall cleanup. The gateway credential is written by `credential`, never by hand. CONTRIBUTING.md, SECURITY.md, and issue and merge request templates. No mirror link.
+- Tests: Playwright loads three fixture DOMs and runs the real `SNAPSHOT_JS` / `CHATS_JS`. They are skipped when Playwright is not installed.
 
 ## [0.1.4] - 2026-10-01
 
