@@ -288,13 +288,77 @@ def send_payload(
 
 
 _CHAT_SKIP = frozenset((*CHAT_CHROME, *NEW_SIDE_CHAT, *EMPTY_SIDE_CHAT))
+_PAGE_CHROME = _CHAT_SKIP | frozenset(
+    {
+        "Muse",
+        "Meta Muse",
+        "Meta AI",
+        "Your Personal AI Agent",
+        "副聊天室",
+        "Side chats",
+    }
+)
+_PAGE_CHROME_FOLDED = frozenset(item.casefold() for item in _PAGE_CHROME)
+_TITLE_SEPS = (" — ", " – ", " - ", " | ", " · ")
 
 
-def shape_chats(main_spans: list[str] | None, rows: list[dict] | None) -> list[dict]:
-    """Main chat first, then side chats. Empty-state copy and the new-chat control are not chats."""
+def _chrome_label(text: str) -> bool:
+    return text in _PAGE_CHROME or text.casefold() in _PAGE_CHROME_FOLDED
+
+
+def _conversation_title(raw: str | None) -> str | None:
+    """A chat name from a heading or document.title. Interface words are not names."""
+    text = " ".join(str(raw or "").split())
+    if not text or _chrome_label(text):
+        return None
+    for sep in _TITLE_SEPS:
+        if sep not in text:
+            continue
+        head, _, tail = text.partition(sep)
+        head, tail = head.strip(), tail.strip()
+        if not head or not tail:
+            continue
+        head_chrome = _chrome_label(head)
+        tail_chrome = _chrome_label(tail)
+        if head_chrome and tail_chrome:
+            return None
+        if head_chrome:
+            return _conversation_title(tail)
+        if tail_chrome:
+            return _conversation_title(head)
+        return text
+    return text
+
+
+def _first_conversation_title(values) -> str | None:
+    if values is None:
+        return None
+    items = [values] if isinstance(values, str) else list(values)
+    for item in items:
+        title = _conversation_title(None if item is None else str(item))
+        if title:
+            return title
+    return None
+
+
+def shape_chats(
+    main_spans: list[str] | None,
+    rows: list[dict] | None,
+    *,
+    page_title: str | None = None,
+    outside_titles=None,
+) -> list[dict]:
+    """Main chat first, then side chats. Empty-state copy and the new-chat control are not chats.
+
+    The main title is a name from the old switcher, a heading outside the sidebar,
+    or document.title. Interface labels are left out. None means no name was found.
+    """
     spans = [str(item or "").strip() for item in (main_spans or []) if str(item or "").strip()]
     titled = [item for item in spans if item not in _CHAT_SKIP]
-    main_title = max(titled, key=len) if titled else "聊天室"
+    if titled:
+        main_title = max(titled, key=len)
+    else:
+        main_title = _first_conversation_title(outside_titles) or _conversation_title(page_title)
     sides: list[dict] = []
     for row in rows or []:
         if row.get("options"):

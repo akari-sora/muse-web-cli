@@ -258,8 +258,21 @@ def collect_chats(driver) -> dict:
     try:
         raw = driver.read_chats()
     except PageChanged as exc:
+        if exc.hint:
+            return chats_payload(
+                [],
+                backend="browser",
+                state="ui_changed",
+                error=exc.error,
+                hint=exc.hint,
+            )
         return _page_error("chats", exc.missing)
-    chats = shape_chats(raw.get("mainSpans"), raw.get("rows"))
+    chats = shape_chats(
+        raw.get("mainSpans"),
+        raw.get("rows"),
+        page_title=raw.get("pageTitle"),
+        outside_titles=raw.get("outsideTitles"),
+    )
     return chats_payload(chats, backend="browser")
 
 

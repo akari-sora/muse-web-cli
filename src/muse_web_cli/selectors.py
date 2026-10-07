@@ -37,13 +37,38 @@ COPY_REPLY = (
     'button[aria-label="Copy response"]'
 )
 
-SWITCHER = '[data-testid="hatch-chat-switcher-trigger"]'
+# The dock chat control is the switcher on the new shell. The older dropdown
+# trigger is kept behind it so a page that still has that button still matches.
+# Listed order is the priority. chats does not click either control.
+SWITCHER_TESTIDS = (
+    "hatch-nav-chat",
+    "hatch-chat-switcher-trigger",
+)
+
+
+def switcher_selectors() -> tuple[str, ...]:
+    return tuple(f'[data-testid="{testid}"]' for testid in SWITCHER_TESTIDS)
+
+
+def switcher_in_markup(markup: str) -> str | None:
+    """First priority switcher testid that this HTML fragment actually contains."""
+    for testid in SWITCHER_TESTIDS:
+        if f'data-testid="{testid}"' in markup:
+            return testid
+    return None
+
+
+SWITCHER = ", ".join(switcher_selectors())
+DOCK = '[data-testid="hatch-dock-rail"]'
 SIDE_CHATS = '[data-testid="hatch-side-chats-panel-shell"]'
 SIDE_CHATS_CONTENT = '[data-testid="hatch-side-chats-panel-content"]'
 # Labels on the switcher and the empty side-chat state. They are not chat titles.
 CHAT_CHROME = ("聊天室", "Chat", "Chats")
 NEW_SIDE_CHAT = ("新副聊天室", "New side chat")
 EMPTY_SIDE_CHAT = ("開始副聊天室", "Start a side chat")
+# A closed sidebar is not clicked open. chats uses the existing error and hint keys.
+SIDEBAR_CLOSED_ERROR = "讀不到側欄裡的對話清單"
+SIDEBAR_CLOSED_HINT = "請在 Muse 打開側欄後重試"
 
 # --- right status panel -----------------------------------------------------
 
@@ -110,9 +135,8 @@ OPTIONAL_SELECTORS = {
 }
 
 # Clicks are an allowlist (see nav.ALLOWED_CLICKS). These stay listed so a
-# reviewer can see the controls the tool must not operate. The switcher trigger
-# is not in this list: chats opens it, reads the list, and closes it. Rows and
-# the new-side-chat control stay unclicked.
+# reviewer can see the controls the tool must not operate. chats does not click
+# the switcher, a sidebar row, or the new-side-chat control.
 FORBIDDEN_TESTIDS = (
     "hatch-dock-more",
     "hatch-invite-friends-button",
