@@ -274,10 +274,19 @@ CHATS_JS = f"""
 () => {{
   const sel = {_arg()};
   const norm = (value) => (value || "").replace(/\\s+/g, " ").trim();
-  const trigger = document.querySelector(sel.switcher);
-  const mainSpans = trigger
-    ? [...trigger.querySelectorAll("span")].map((el) => norm(el.innerText)).filter(Boolean)
-    : [];
+  // Selector order is priority. The dock control has no title, so keep
+  // walking until a candidate actually carries the chat-name spans.
+  const parts = String(sel.switcher).split(",").map((part) => part.trim()).filter(Boolean);
+  let mainSpans = [];
+  for (const part of parts) {{
+    const trigger = document.querySelector(part);
+    if (!trigger) continue;
+    const spans = [...trigger.querySelectorAll("span")].map((el) => norm(el.innerText)).filter(Boolean);
+    if (spans.length) {{
+      mainSpans = spans;
+      break;
+    }}
+  }}
   const content = document.querySelector(sel.sideContent);
   if (!content) return {{ok: false, mainSpans, rows: []}};
   const rows = [];

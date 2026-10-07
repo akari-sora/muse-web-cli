@@ -37,7 +37,28 @@ COPY_REPLY = (
     'button[aria-label="Copy response"]'
 )
 
-SWITCHER = '[data-testid="hatch-chat-switcher-trigger"]'
+# The dock chat control opens the side-chat sidebar. The older dropdown
+# trigger is kept behind it so a page that still has that button still matches.
+# Listed order is the priority: try the sidebar control before the dropdown.
+SWITCHER_TESTIDS = (
+    "hatch-nav-chat",
+    "hatch-chat-switcher-trigger",
+)
+
+
+def switcher_selectors() -> tuple[str, ...]:
+    return tuple(f'[data-testid="{testid}"]' for testid in SWITCHER_TESTIDS)
+
+
+def switcher_in_markup(markup: str) -> str | None:
+    """First priority switcher testid that this HTML fragment actually contains."""
+    for testid in SWITCHER_TESTIDS:
+        if f'data-testid="{testid}"' in markup:
+            return testid
+    return None
+
+
+SWITCHER = ", ".join(switcher_selectors())
 SIDE_CHATS = '[data-testid="hatch-side-chats-panel-shell"]'
 SIDE_CHATS_CONTENT = '[data-testid="hatch-side-chats-panel-content"]'
 # Labels on the switcher and the empty side-chat state. They are not chat titles.

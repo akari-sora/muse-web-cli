@@ -15,12 +15,14 @@ from muse_web_cli.selectors import (
     TAB_IDENTITY,
     TAB_PENDING,
     TAB_UPCOMING,
+    switcher_selectors,
 )
 
 ALLOWED_CLICKS = frozenset(
     {
         COMPOSER,
         SWITCHER,
+        *switcher_selectors(),
         TAB_PENDING,
         TAB_UPCOMING,
         TAB_ACTIVITY,
@@ -80,7 +82,12 @@ def read_memory_flow(
 
 
 def read_chats_flow(*, is_open: Callable[[], bool], open_panel: Callable[[], None], close_panel: Callable[[], None], read: Callable[[], dict]) -> dict:
-    """Open the switcher only when it is closed, then restore that state."""
+    """Read the chat list without leaving the sidebar open if it was closed.
+
+    The new shell shows that list as a sidebar. When the sidebar is already
+    open this does not click it and does not close it. The older dropdown is
+    opened only while it is closed, then closed again.
+    """
     opened = False
     if not is_open():
         opened = True

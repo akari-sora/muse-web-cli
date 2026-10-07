@@ -1,4 +1,5 @@
 import json
+from pathlib import Path
 
 import pytest
 
@@ -6,17 +7,60 @@ from muse_web_cli.backends.api import ApiBackend
 from muse_web_cli.cli import main
 from muse_web_cli.errors import PageChanged
 from muse_web_cli.flow import collect_chats
-from muse_web_cli.model import exit_for, shape_chats
-from muse_web_cli.nav import guard_click, read_chats_flow
-from muse_web_cli.selectors import KEY_SELECTORS, NEW_SIDE_CHAT, SWITCHER
+from muse_web_cli.model import assess, exit_for, shape_chats
+from muse_web_cli.nav import ALLOWED_CLICKS, guard_click, read_chats_flow
+from muse_web_cli.selectors import (
+    KEY_SELECTORS,
+    NEW_SIDE_CHAT,
+    SWITCHER,
+    SWITCHER_TESTIDS,
+    switcher_in_markup,
+    switcher_selectors,
+)
 from tests.fakes import ok_snapshot
+
+_FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _switcher_status(markup: str) -> dict:
+    snap = ok_snapshot()
+    snap.selectors["switcher"] = switcher_in_markup(markup) is not None
+    return assess(snap)
 
 
 def test_selftest_requires_the_switcher():
     assert "switcher" in KEY_SELECTORS
+    assert SWITCHER_TESTIDS[0] == "hatch-nav-chat"
     assert "hatch-chat-switcher-trigger" in SWITCHER
+    assert SWITCHER.index("hatch-nav-chat") < SWITCHER.index("hatch-chat-switcher-trigger")
+    for selector in switcher_selectors():
+        assert selector in ALLOWED_CLICKS
+        guard_click(selector)
     with pytest.raises(Exception):
         guard_click("button.new-side-chat")
+
+
+def test_sidebar_and_dropdown_both_count_as_the_switcher():
+    sidebar = (_FIXTURES / "switcher_sidebar.html").read_text(encoding="utf-8")
+    dropdown = (_FIXTURES / "switcher_trigger.html").read_text(encoding="utf-8")
+    assert "假主對話" in dropdown
+    assert "hatch-chat-switcher-trigger" not in sidebar
+    assert "hatch-nav-chat" not in dropdown
+    assert switcher_in_markup(sidebar) == "hatch-nav-chat"
+    assert switcher_in_markup(dropdown) == "hatch-chat-switcher-trigger"
+    assert switcher_in_markup(sidebar + dropdown) == "hatch-nav-chat"
+    assert _switcher_status(sidebar)["state"] == "ok"
+    assert _switcher_status(dropdown)["state"] == "ok"
+
+
+def test_missing_switcher_is_still_ui_changed():
+    markup = (_FIXTURES / "switcher_missing.html").read_text(encoding="utf-8")
+    assert switcher_in_markup(markup) is None
+    status = _switcher_status(markup)
+    assert status["state"] == "ui_changed"
+    assert status["error"] == "Muse 頁面結構對不上"
+    assert status["missing"] == ["switcher"]
+    assert exit_for(status["state"]) == 3
 
 
 def test_main_chat_only():

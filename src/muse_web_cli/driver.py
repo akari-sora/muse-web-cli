@@ -29,6 +29,7 @@ from muse_web_cli.selectors import (
     TAB_IDENTITY,
     TAB_PENDING,
     TAB_UPCOMING,
+    switcher_selectors,
 )
 
 _TAB_CLICKS = frozenset({TAB_PENDING, TAB_UPCOMING, TAB_ACTIVITY, TAB_IDENTITY})
@@ -36,6 +37,7 @@ _TAB_CLICKS = frozenset({TAB_PENDING, TAB_UPCOMING, TAB_ACTIVITY, TAB_IDENTITY})
 _CLICK_NAME = {
     COMPOSER: "composer",
     SWITCHER: "switcher",
+    **{item: "switcher" for item in switcher_selectors()},
     TAB_PENDING: "pending_tab",
     TAB_UPCOMING: "upcoming_tab",
     TAB_ACTIVITY: "activity_tab",
@@ -199,7 +201,18 @@ class CdpPage:
 
     def read_chats(self) -> dict:
         def open_panel() -> None:
-            self.click(SWITCHER)
+            # Listed order: the dock control that opens the sidebar, then the old dropdown.
+            chosen = None
+            for selector in switcher_selectors():
+                locator = self.page.locator(selector)
+                try:
+                    count = locator.count()
+                except Exception as exc:
+                    raise BrowserDown(safe_text(str(exc))) from exc
+                if count:
+                    chosen = selector
+                    break
+            self.click(chosen or switcher_selectors()[0])
             self._wait_until(self._side_chats_open, "side_chats")
 
         def close_panel() -> None:

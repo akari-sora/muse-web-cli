@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Muse's chat switcher is the dock control that opens the side-chat sidebar. `selftest` still accepts the old dropdown trigger, and a page with neither reports `ui_changed`.
 - A fresh profile that lands on Muse's signed-out page reports `session_expired` with the `muse-web-cli login` hint. It used to say `ui_changed`.
 - `status`, `messages`, and `send` wait up to 8 seconds for a just-started Chrome to render the page before deciding it changed.
 - `--help` and `--version` work even when the config file is broken.
