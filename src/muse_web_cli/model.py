@@ -473,15 +473,6 @@ def setup_status(state: str, error: str, hint: str | None, *, backend: str) -> d
     return _status(state, error=error, hint=hint, backend=backend)
 
 
-def credential_missing() -> dict:
-    return setup_status(
-        "session_expired",
-        "找不到 ~/.trinity-cli/muse-credential",
-        LOGIN_HINT,
-        backend="api",
-    )
-
-
 def credential_loose(*, error: str | None = None, hint: str | None = None) -> dict:
     return setup_status(
         "credential_permissions",
