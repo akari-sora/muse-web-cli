@@ -7,12 +7,11 @@ import time
 
 from dataclasses import dataclass
 
-from muse_web_cli.errors import BrowserDown, PageChanged
+from muse_web_cli.errors import PageChanged
 from muse_web_cli.model import (
     Message,
     Snapshot,
     assess,
-    browser_down,
     chats_payload,
     empty_like,
     memory_payload,
@@ -26,8 +25,7 @@ from muse_web_cli.model import (
     missing_keys,
     _status,
 )
-from muse_web_cli.nav import read_chats_flow, read_memory_flow, read_with_tab
-from muse_web_cli.selectors import TAB_ACTIVITY, TAB_IDENTITY, TAB_PENDING, TAB_UPCOMING
+from muse_web_cli.selectors import TAB_ACTIVITY, TAB_PENDING, TAB_UPCOMING
 
 
 @dataclass
@@ -324,9 +322,7 @@ def message_from_raw(raw: dict) -> Message:
     )
 
 
-# Re-exported so a backend can map connection failure without importing flow internals.
 __all__ = [
-    "BrowserDown",
     "collect_activity",
     "collect_chats",
     "collect_memory",
@@ -336,7 +332,4 @@ __all__ = [
     "collect_status",
     "collect_upcoming",
     "perform_send",
-    "read_memory_flow",
-    "read_with_tab",
-    "browser_down",
 ]
