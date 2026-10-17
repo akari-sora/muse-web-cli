@@ -1,5 +1,7 @@
 # muse-web-cli
 
+> 正本和 issue 在 https://gitlab.com/aa22396584/muse-web-cli；GitHub 上的 https://github.com/hoshitabi/muse-web-cli 是唯讀鏡像。
+
 [![pipeline](https://gitlab.com/aa22396584/muse-web-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/commits/main)
 [![release](https://gitlab.com/aa22396584/muse-web-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/releases)
 [![license: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
