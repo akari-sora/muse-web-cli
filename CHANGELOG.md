@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.1.6] - 2026-11-08
+
+- `send --attach FILE` (repeatable) uploads files through the Muse window's composer file input (the attach button is never clicked) and sends one message. A missing or non-regular file exits 2 and nothing is sent; a file that does not attach sends nothing and is removed from the composer.
+- `send --attach-sha256 HEX` (repeatable, in `--attach` order): each file is read once and Muse gets exactly the hashed bytes (handed to the browser up to 50 MB, above that through a private temporary copy that is removed afterwards). A mismatch exits 2; nothing is uploaded or sent.
+- `send --session ID` opens that side chat by its URL, checks that the page really shows it before anything is attached or typed, and returns to the main chat afterwards; a failed return keeps the send as sent, with a `warning`. With an `--backend api` credential the reply is read through the api; a reply that starts with `[file: …]` still matches.
+- A sent message is never reported as not sent: every failure from the Enter key on (the key press, the page changing, the page going away while waiting) is `attempted: true`, "may have been sent". A failed disconnect no longer replaces the result.
+- One lock (`~/.trinity-cli/muse-web-cli.page.lock`) around every use of the Muse window, so two commands cannot interleave.
+- `chats --create` returns the new chat's id as `created`.
+
 ## [0.1.5] - 2026-10-08
 
 - Muse's chat switcher is the dock control for the side-chat sidebar. `selftest` still accepts the old dropdown trigger, and a page with neither reports `ui_changed`. trinity-cli's Muse seat works again.
