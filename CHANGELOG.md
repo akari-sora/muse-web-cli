@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.7] - 2026-11-09
+
+- Muse removed the Upcoming tab from the status panel and moved scheduled tasks into the Activity tab, as its first group (「2項排定任務」). On such a page `upcoming` reads only that group from the Activity tab, in the same `name` / `time` shape, and leaves out the dated groups below it; 0.1.6 returned `ui_changed`. A page that still has the Upcoming tab is read as before. The missing tab is found from the locator count, so no extra control is clicked.
+- When the header counts more tasks than the panel lists, `upcoming` adds `complete: false` and a hint pointing to `--backend api upcoming`. 「查看所有排定任務」 is not clicked. An Activity tab with groups but no scheduled group is `count` 0; an Activity tab with nothing in it is `ui_changed`.
+- `selftest` no longer requires `upcoming_tab`; it is still reported in `present`.
+
 ## [0.1.6] - 2026-11-08
 
 - `send --attach FILE` (repeatable) uploads files through the Muse window's composer file input (the attach button is never clicked) and sends one message. A missing or non-regular file exits 2 and nothing is sent; a file that does not attach sends nothing and is removed from the composer.

@@ -22,20 +22,20 @@ You need Python 3.11+, uv or pipx, and Google Chrome or Chromium already install
 
 ## Install
 
-v0.1.6. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.6`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.7. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.7`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 muse-web-cli --version
 ```
 
