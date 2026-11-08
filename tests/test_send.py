@@ -400,6 +400,7 @@ def test_attach_sha256_mismatch_exits_2_before_the_window_is_used(tmp_path, monk
 
 def test_the_hashed_bytes_are_the_bytes_playwright_gets(tmp_path, monkeypatch):
     import hashlib
+    import mimetypes
     import os
 
     from muse_web_cli import cli
@@ -407,10 +408,12 @@ def test_the_hashed_bytes_are_the_bytes_playwright_gets(tmp_path, monkeypatch):
     bundle = tmp_path / "bundle.zip"
     bundle.write_bytes(b"PK one")
     files = cli._read_attachments([str(bundle)], [hashlib.sha256(b"PK one").hexdigest().upper()])
-    assert files == [("bundle.zip", "application/zip", b"PK one")]
+    # The type the OS maps .zip to, as a browser on that OS reports it (Windows: application/x-zip-compressed).
+    zip_type = mimetypes.guess_type("bundle.zip")[0]
+    assert files == [("bundle.zip", zip_type, b"PK one")]
     bundle.write_bytes(b"PK swapped")  # later changes to the file do not reach the upload
     with cli._uploads(files) as given:
-        assert given == [{"name": "bundle.zip", "mimeType": "application/zip", "buffer": b"PK one"}]
+        assert given == [{"name": "bundle.zip", "mimeType": zip_type, "buffer": b"PK one"}]
     # Above Playwright's buffer limit: a private copy written from the same bytes.
     monkeypatch.setattr(cli, "_BUFFER_LIMIT", 1)
     with cli._uploads(files) as given:
