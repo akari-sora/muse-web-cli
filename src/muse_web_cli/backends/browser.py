@@ -55,9 +55,16 @@ class BrowserBackend:
         except BrowserDown as exc:
             return self._down(exc, "messages")
 
-    def send(self, text: str, *, wait: bool, timeout: float) -> dict:
+    def send(self, text: str, *, wait: bool, timeout: float, attach: list[str] | None = None, session: str | None = None) -> dict:
         try:
-            return perform_send(self.driver, text, wait=wait, timeout=timeout)
+            if session:
+                # A side chat is shown by its URL; the window goes back to the main chat afterwards.
+                self.driver.open_thread(session)
+                try:
+                    return perform_send(self.driver, text, wait=wait, timeout=timeout, attach=attach, side_chat=True)
+                finally:
+                    self.driver.open_thread(None)
+            return perform_send(self.driver, text, wait=wait, timeout=timeout, attach=attach)
         except BrowserDown as exc:
             return self._down(exc, "send", text)
 

@@ -486,6 +486,11 @@ class MuseGateway:
             first["hint"] = "沒有再送一次"
         if not wait or first.get("state") != "ok":
             return first
+        return self.wait_reply(text, first=first, prior=prior, session=chosen, timeout=timeout, started=started)
+
+    def wait_reply(self, text: str, *, first: dict, prior: list, session: str | None, timeout: float, started: float) -> dict:
+        """Poll until a settled reply to `text` that was not in `prior` arrives. Never sends."""
+        chosen = session
         gap = 0.2
         while time.monotonic() - started < timeout:
             remaining = timeout - (time.monotonic() - started)

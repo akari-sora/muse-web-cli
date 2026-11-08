@@ -103,10 +103,18 @@ def collect_messages(driver, limit: int) -> dict:
     return messages_payload(snap.messages, backend="browser", limit=limit)
 
 
-def perform_send(driver, text: str, *, wait: bool, timeout: float) -> dict:
-    """Insert the draft once, press Enter once, then wait. A timeout does not send again."""
+# A side chat page (muse.ai/thread/<id>) has the log and composer but not the main chat's
+# status-panel avatar or chat switcher; sending needs only the first two.
+SIDE_CHAT_ABSENT = frozenset({"avatar", "switcher"})
+
+
+def perform_send(driver, text: str, *, wait: bool, timeout: float, attach: list[str] | None = None, side_chat: bool = False) -> dict:
+    """Insert the draft once (with any attachments), press Enter once, then wait. A timeout does not send again."""
     started = time.monotonic()
     snap, status = settled_snapshot(driver)
+    if (side_chat and status["state"] == "ui_changed" and snap.has_log and snap.has_composer
+            and set(status.get("missing") or []) <= SIDE_CHAT_ABSENT):
+        status = {**status, "state": "ok"}
     if status["state"] != "ok":
         return send_payload(
             backend="browser",
@@ -117,10 +125,15 @@ def perform_send(driver, text: str, *, wait: bool, timeout: float) -> dict:
         )
     before = user_count(snap.messages, text)
     try:
+        if attach:
+            driver.attach_files(attach)
         driver.insert_text(text)
         driver.press_enter()
     except PageChanged as exc:
-        error = "composer is not empty; nothing was sent" if exc.missing == "composer_not_empty" else "Muse 頁面結構對不上"
+        if attach and exc.missing != "composer_not_empty":
+            driver.clear_attachments()
+        error = ("composer is not empty; nothing was sent" if exc.missing == "composer_not_empty"
+                 else "the file did not attach; nothing was sent" if exc.missing == "attachment" else "Muse 頁面結構對不上")
         return send_payload(
             backend="browser",
             state="ui_changed",

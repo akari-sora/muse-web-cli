@@ -163,3 +163,62 @@ def test_memory_closes_editor_without_typing():
         guard_click('[data-pel-click="connector_mail"]')
     with pytest.raises(Exception):
         guard_click('[data-testid="hatch-file-editor-maximize"]')
+
+
+class AttachDriver(FakeDriver):
+    def __init__(self, *args, fail_attach=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fail_attach = fail_attach
+
+    def attach_files(self, paths):
+        self.calls.append(("attach", tuple(paths)))
+        if self.fail_attach:
+            from muse_web_cli.errors import PageChanged
+
+            raise PageChanged("attachment")
+
+    def clear_attachments(self):
+        self.calls.append("clear")
+
+    def open_thread(self, session):
+        self.calls.append(("open", session))
+
+
+def test_attachments_go_in_before_the_text_and_send_once():
+    outcome = WaitResult(False, "reply", [Message("user", "unzip"), Message("assistant", "done", busy=False, streaming=False, has_actions=True)])
+    driver = AttachDriver(outcome)
+    payload = perform_send(driver, "unzip", wait=True, timeout=5, attach=["/tmp/a.zip"])
+    assert payload["state"] == "ok" and payload["reply"] == "done"
+    assert driver.calls.index(("attach", ("/tmp/a.zip",))) < driver.calls.index("insert") < driver.calls.index("enter")
+
+
+def test_a_file_that_does_not_attach_sends_nothing_and_is_removed():
+    driver = AttachDriver(fail_attach=True)
+    payload = perform_send(driver, "unzip", wait=True, timeout=5, attach=["/tmp/a.zip"])
+    assert payload["state"] == "ui_changed" and payload["sent"] is False and payload["attempted"] is False
+    assert "did not attach" in payload["error"]
+    assert "clear" in driver.calls and "insert" not in driver.calls
+
+
+def test_a_side_chat_send_opens_its_url_and_returns_to_main():
+    outcome = WaitResult(False, "reply", [Message("user", "x"), Message("assistant", "ok", busy=False, streaming=False, has_actions=True)])
+    driver = AttachDriver(outcome)
+    BrowserBackend(driver, headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session="f551b46a-2db4-4419-aff5-b8c40af46167")
+    assert driver.calls[0] == ("open", "f551b46a-2db4-4419-aff5-b8c40af46167")
+    assert driver.calls[-1] == ("open", None)
+
+
+def test_attach_needs_a_regular_file(tmp_path, capsys):
+    from muse_web_cli.cli import main
+
+    assert main(["send", "hi", "--attach", str(tmp_path / "missing.zip")]) == 2
+    assert "--attach needs a regular file" in capsys.readouterr().err
+
+
+def test_an_attachment_prefix_does_not_hide_the_sent_message():
+    from muse_web_cli.model import reply_text, user_count
+
+    rows = [Message("user", "[file:application/zip workspace/user/files/b.zip] unzip it"),
+            Message("assistant", "done", busy=False, streaming=False, has_actions=True)]
+    assert user_count(rows, "unzip it") == 1
+    assert reply_text(rows, "unzip it") == ("done", False)

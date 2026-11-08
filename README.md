@@ -144,6 +144,7 @@ muse-web-cli --json pending
 - `status` — 工作階段、待核可數量、最新助理訊息是不是卡片。`muse-web-cli status`
 - `messages --limit N` — 由舊到新。預設 20，最小 1，超過 100 會截成 100。離畫面外的列是虛擬化的。`--session ID` 只在 `--backend api` 有效。`muse-web-cli messages --limit 20`
 - `send TEXT` — `insertText` 加 Enter，只送一次。文字若以 `-` 開頭，前面加 `--`。`--wait` 預設關。`--timeout` 預設 120，必須大於 0。逾時不會重送。`--wait` 只接受送出前快照之後才出現的回覆，聊天很長也一樣。`--session ID` 只在 `--backend api` 有效；瀏覽器後端給了會以結束碼 2 拒絕，不會送出。`muse-web-cli send --wait --timeout 120 -- "文字"`
+- `send --attach FILE`（可重複）— 透過 Muse 視窗上傳檔案再送出，只送一次；檔案不存在或不是一般檔案時結束碼 2，什麼都不送。加 `--session ID` 時先打開那則副聊天室（`muse.ai/thread/<ID>`），送完回主聊天室；有 `--backend api` 憑證時用 api 等回覆。檔案沒附上就不送出，並移除已附上的檔案。`muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "解壓縮…"`
 - `pending` — 只讀核可項目，不點核可或拒絕。`muse-web-cli pending`
 - `upcoming` — 只讀近期，不點列。`muse-web-cli upcoming`
 - `activity` — 只讀動態，不點列。`muse-web-cli activity`
@@ -227,7 +228,7 @@ muse-web-cli credential
 
 ### 安全
 
-記憶體只讀。不會點設定、連接器、邀請、附加檔案、新的副聊天室、記憶工具列、核可或拒絕。不讀 cookie，不開 CDP 的 Network / Storage，也不印出 token。`credential` 把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600）。`--backend api` 用這份憑證呼叫 gateway。印出的 `error`、`hint` 會先清掉 `auth_token=`、`Bearer`、JWT 這類字串；訊息內文不改。
+記憶體只讀。不會點設定、連接器、邀請、附加檔案按鈕（`send --attach` 直接把檔案放進輸入框的檔案欄位）、新的副聊天室、記憶工具列、核可或拒絕。不讀 cookie，不開 CDP 的 Network / Storage，也不印出 token。`credential` 把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600）。`--backend api` 用這份憑證呼叫 gateway。印出的 `error`、`hint` 會先清掉 `auth_token=`、`Bearer`、JWT 這類字串；訊息內文不改。
 
 ### 排解
 
@@ -407,6 +408,7 @@ Global flags may appear before or after the command:
 - `status` — session, pending count, and whether the latest assistant message is a card. `muse-web-cli status`
 - `messages --limit N` — oldest to newest. Default 20, minimum 1, values above 100 are capped at 100. Off-screen rows are virtualized. `--session ID` works only with `--backend api`. `muse-web-cli messages --limit 20`
 - `send TEXT` — insertText and Enter, once. Put `--` before text that starts with `-`. `--wait` defaults off. `--timeout` defaults to 120 and must be > 0. A timeout never resends. `--wait` accepts only a reply that appears after the pre-send snapshot, in long chats too. `--session ID` works only with `--backend api`; the browser backend refuses it with exit 2 and sends nothing. `muse-web-cli send --wait --timeout 120 -- "text"`
+- `send --attach FILE` (repeatable) — uploads through the Muse window and sends once; a missing or non-regular file exits 2 and sends nothing. With `--session ID` it opens that side chat (`muse.ai/thread/<ID>`) and returns to the main chat afterwards; with an `--backend api` credential the reply is read through the api. If a file does not attach, nothing is sent and attached files are removed. `muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "unzip …"`
 - `pending` — read approvals. It does not approve or reject. `muse-web-cli pending`
 - `upcoming` — read the upcoming tab. It does not click a row. `muse-web-cli upcoming`
 - `activity` — read the activity tab. It does not click a row. `muse-web-cli activity`
@@ -490,7 +492,7 @@ A missing file, or no `vm_id` and no endpoint for that command, is exit 4. HTTP 
 
 ### Safety
 
-Memory is read-only. The tool never clicks settings, connectors, invites, attach, a new side chat, the memory toolbar, or approve/reject. It does not read cookies, enable the CDP Network or Storage domains, or print a token. `credential` writes the gateway token only into `~/.trinity-cli/muse-credential` (mode 600). `--backend api` calls the gateway with that file. Printed `error` and `hint` text is scrubbed of `auth_token=`, `Bearer`, and JWT strings; message bodies are left as they are.
+Memory is read-only. The tool never clicks settings, connectors, invites, the attach button (`send --attach` puts files straight into the composer's file input), a new side chat, the memory toolbar, or approve/reject. It does not read cookies, enable the CDP Network or Storage domains, or print a token. `credential` writes the gateway token only into `~/.trinity-cli/muse-credential` (mode 600). `--backend api` calls the gateway with that file. Printed `error` and `hint` text is scrubbed of `auth_token=`, `Bearer`, and JWT strings; message bodies are left as they are.
 
 ### Troubleshooting
 

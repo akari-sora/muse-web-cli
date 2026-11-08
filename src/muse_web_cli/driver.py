@@ -5,7 +5,9 @@ Network and Storage CDP domains are never enabled. Cookies and tokens are never 
 
 from __future__ import annotations
 
+import re
 import time
+from pathlib import Path
 from urllib.parse import urlsplit
 
 from muse_web_cli.errors import BrowserDown, PageChanged
@@ -15,10 +17,12 @@ from muse_web_cli.nav import guard_click, read_chats_flow, read_memory_flow, rea
 from muse_web_cli.output import safe_text
 from muse_web_cli.probes import CHATS_JS, MEMORY_JS, OBSERVER_JS, PANEL_JS, PANEL_STATE_JS, SNAPSHOT_JS
 from muse_web_cli.selectors import (
+    ATTACHMENT,
     AVATAR_BUTTON,
     COMPOSER,
     EDITOR,
     EDITOR_CLOSE,
+    FILE_INPUT,
     LOG,
     MEMORY_FILE,
     MUSE_URL,
@@ -29,6 +33,7 @@ from muse_web_cli.selectors import (
     TAB_IDENTITY,
     TAB_PENDING,
     TAB_UPCOMING,
+    THREAD_URL,
     switcher_selectors,
 )
 
@@ -151,6 +156,43 @@ class CdpPage:
         self.page.locator(COMPOSER).first.focus()
         self.page.keyboard.press("ControlOrMeta+A")
         self.page.keyboard.press("Backspace")
+
+    def open_thread(self, session_id: str | None) -> None:
+        """Show one chat in the window: a side chat by its session id, or the main chat (None)."""
+        if session_id is not None and not re.fullmatch(r"[0-9a-fA-F-]{8,64}", session_id):
+            raise PageChanged("session")
+        self.page.goto(THREAD_URL.format(session_id) if session_id else MUSE_URL)
+        self.page.wait_for_load_state("load")
+        # The composer is server-rendered before the page is live; the chat log comes after.
+        self._wait_until(lambda: self.page.locator(COMPOSER).count() > 0 and self.page.locator(LOG).count() > 0, "composer", timeout=45.0)
+        time.sleep(2.0)
+
+    def attach_files(self, paths: list[str]) -> None:
+        """Attach files through the composer's file input; the attach button is never clicked."""
+        if self.page.locator(ATTACHMENT).count():
+            raise PageChanged("composer_not_empty")
+        files = [str(Path(p)) for p in paths]
+        # A page that is still starting ignores the files; set them again only while none showed up.
+        for _ in range(3):
+            self.page.locator(FILE_INPUT).first.set_input_files(files)
+            try:
+                self._wait_until(lambda: self.page.locator(ATTACHMENT).count() >= len(files), "attachment", timeout=10.0)
+                break
+            except PageChanged:
+                if self.page.locator(ATTACHMENT).count():
+                    break
+        time.sleep(0.5)
+        if self.page.locator(ATTACHMENT).count() != len(files):
+            self.clear_attachments()
+            raise PageChanged("attachment")
+
+    def clear_attachments(self) -> None:
+        """Remove files this run attached when the send did not happen."""
+        for _ in range(20):
+            if not self.page.locator(ATTACHMENT).count():
+                return
+            self.page.locator(ATTACHMENT).first.click(timeout=5000)
+            time.sleep(0.2)
 
     def press_enter(self) -> None:
         self.page.locator(COMPOSER).first.focus()
