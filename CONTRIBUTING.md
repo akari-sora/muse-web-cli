@@ -23,7 +23,7 @@ Windows (PowerShell): set `$env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"` before t
 - Tests use fake pages and fake HTTP. They never open muse.ai and never read a real profile or credential file.
 - Do not add code or docs that extract cookies or tokens from a browser, replay requests outside the browser, or click settings, connectors, approvals, or attachments. The `api` backend only reads a credential file the user supplies.
 - Never commit tokens, cookies, credential files, account, chat, or bot ids, message text, emails, IP addresses, host names, or absolute local paths. Use fake values in tests and docs.
-- Keep the English and 中文 sections of the README in sync.
+- Keep `README.md` and `README.zh-TW.md` in sync, and `docs/reference.md` and `docs/reference.zh-TW.md` in sync.
 - A bug fix comes with a test that fails without it.
 - One topic per merge request. Describe how you tested it.
 
@@ -34,7 +34,7 @@ GitLab CI runs the tests on Linux for every push and on Windows for merge reques
 ## Release process (maintainers)
 
 1. Bump `version` in `pyproject.toml` and `__version__` in `src/muse_web_cli/__init__.py`, then run `uv lock`.
-2. Update the install pins (`@vX.Y.Z`) and the `muse-web-cli X.Y.Z` version line in both README sections.
+2. Update the install pins (`@vX.Y.Z`) and the `muse-web-cli X.Y.Z` version line in `README.md` and `README.zh-TW.md`.
 3. Add a `## [X.Y.Z] - YYYY-MM-DD` heading at the top of `CHANGELOG.md`. `tests/test_docs.py` and the tag pipeline both read it.
 4. Merge to `main` and wait for a green pipeline.
 5. Tag `vX.Y.Z` on `main` and push the tag. The tag pipeline checks the version and creates the GitLab Release.
