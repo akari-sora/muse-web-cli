@@ -22,20 +22,20 @@ You need Python 3.11+, uv or pipx, and Google Chrome or Chromium already install
 
 ## Install
 
-v0.1.6. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.6`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.7. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.7`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 muse-web-cli --version
 ```
 
@@ -72,7 +72,7 @@ What each one prints: [Output examples](docs/reference.md#output-examples).
 | `messages` | recent messages, oldest to newest (`--limit`, default 20, capped at 100) |
 | `send` | send once (`--wait`, `--timeout`, `--attach FILE`, `--attach-sha256 HEX`); a timeout never resends |
 | `pending` | read approvals; does not approve or reject |
-| `upcoming` | read the upcoming tab; does not click a row |
+| `upcoming` | read scheduled tasks (the upcoming tab, or the activity tab's scheduled group); does not click a row |
 | `activity` | read the activity tab; does not click a row |
 | `memory` | read MEMORY.md `innerText`; does not focus or type |
 | `chats` | list the main and side chats; `--create`, `--rename`, `--delete`, `--switch` with `--backend api` only |

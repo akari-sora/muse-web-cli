@@ -22,20 +22,20 @@
 
 ## 安裝
 
-v0.1.6。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.6`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.7。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.7`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.7"
 muse-web-cli --version
 ```
 
@@ -72,7 +72,7 @@ muse-web-cli --json pending
 | `messages` | 最近訊息，由舊到新（`--limit` 預設 20，超過 100 截成 100） |
 | `send` | 只送一次（`--wait`、`--timeout`、`--attach FILE`、`--attach-sha256 HEX`）；逾時不會重送 |
 | `pending` | 只讀核可項目，不點核可或拒絕 |
-| `upcoming` | 只讀近期，不點列 |
+| `upcoming` | 只讀排定任務（近期分頁，或動態分頁裡的排定任務那一組），不點列 |
 | `activity` | 只讀動態，不點列 |
 | `memory` | 只讀 MEMORY.md 的 `innerText`，不聚焦、不打字 |
 | `chats` | 列出主聊天室與副聊天室；`--create`、`--rename`、`--delete`、`--switch` 只在 `--backend api` |

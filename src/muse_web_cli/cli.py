@@ -122,7 +122,7 @@ def build_parser() -> argparse.ArgumentParser:
         help="seconds for that one wait (default: 120, must be > 0); a timeout never resends",
     )
     sub.add_parser("pending", help="read pending approvals; does not approve or reject")
-    sub.add_parser("upcoming", help="read the upcoming tab; does not click a row")
+    sub.add_parser("upcoming", help="read scheduled tasks (the upcoming tab, or the activity tab's scheduled group); does not click a row")
     sub.add_parser("activity", help="read the activity tab; does not click a row")
     sub.add_parser("memory", help="read MEMORY.md innerText; does not focus or edit it")
     chats = sub.add_parser("chats", help="list chats; with --backend api, create, rename, delete, or switch")

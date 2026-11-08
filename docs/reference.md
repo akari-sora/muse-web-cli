@@ -112,7 +112,7 @@ Global flags may appear before or after the command:
 - `send TEXT` — insertText and Enter, once. Put `--` before text that starts with `-`. `--wait` defaults off. `--timeout` defaults to 120 and must be > 0. A timeout never resends. `--wait` accepts only a reply that appears after the pre-send snapshot, in long chats too. `--session ID` works only with `--backend api`; the browser backend refuses it with exit 2 and sends nothing. `muse-web-cli send --wait --timeout 120 -- "text"`
 - `send --attach FILE` (repeatable) — uploads through the Muse window and sends once; a missing or non-regular file exits 2 and sends nothing. `--attach-sha256 HEX` (repeatable, in `--attach` order): each file is read once and Muse gets exactly the hashed bytes (handed to the browser directly up to 50 MB, above that through a private temporary copy); a mismatch exits 2 and nothing is uploaded or sent. With `--session ID` it opens that side chat (`muse.ai/thread/<ID>`) and returns to the main chat afterwards; with an `--backend api` credential the reply is read through the api. If a file does not attach, no message is sent and the attached files are removed from the composer (Muse may already have stored the upload). If the page does not show that side chat (`muse.ai/thread/<ID>`), nothing is sent. If the window cannot go back to the main chat afterwards, the send is still reported as sent, with a `warning`. `muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "unzip …"`
 - `pending` — read approvals. It does not approve or reject. `muse-web-cli pending`
-- `upcoming` — read the upcoming tab. It does not click a row. `muse-web-cli upcoming`
+- `upcoming` — read scheduled tasks. It does not click a row. Muse removed the Upcoming tab; on a page without it, `upcoming` reads only the Activity tab's scheduled group (headed like 「2項排定任務」 or "2 scheduled tasks") and leaves out the dated groups below it. With no such group, `count` is 0. When the header counts more tasks than the panel lists, `complete` is `false` and the hint points to `--backend api upcoming`; 「查看所有排定任務」 (view all scheduled tasks) is not clicked. `muse-web-cli upcoming`
 - `activity` — read the activity tab. It does not click a row. `muse-web-cli activity`
 - `memory` — read MEMORY.md `innerText`. It does not focus or type. `muse-web-cli memory`
 - `chats` — list the main chat and any side chats already showing in the sidebar. A closed sidebar is not clicked; `state` is `ui_changed` and the hint is「請在 Muse 打開側欄後重試」. It does not click "新副聊天室" / new side chat, and it does not open a chat. On the new shell the main `title` may be null. `muse-web-cli chats`
@@ -121,7 +121,7 @@ Global flags may appear before or after the command:
 - `login` — open a headed window so you can log in. `muse-web-cli login`
 - `start` — start the dedicated Chrome, or attach if it is already running. `--headless` is the default (`--headless=new`). `--headed` shows the window. The two flags cannot be combined. `muse-web-cli start --headless`
 - `stop` — stop only the process this tool started. `muse-web-cli stop`
-- `selftest` — check that selectors exist. It clicks nothing. The switcher trigger is required. `muse-web-cli selftest`
+- `selftest` — check that selectors exist. It clicks nothing. The switcher trigger is required. `upcoming_tab` is reported in `present` but not required. `muse-web-cli selftest`
 
 `--json` keys:
 
@@ -129,7 +129,7 @@ Global flags may appear before or after the command:
 - `messages`: `backend` `state` `name` `lines` `messages` `error` `hint`. Each message is `role` `text` `presentation`
 - `send`: `backend` `state` `attempted` `sent` `text` `reply` `presentation` `elapsed_ms` `error` `hint`
 - `pending`: `backend` `state` `count` `items` `error` `hint`. An item is `title` `detail` `time`
-- `upcoming`: `backend` `state` `count` `groups` `error` `hint`. A group is `title` plus `items` of `name` `time`
+- `upcoming`: `backend` `state` `count` `groups` `error` `hint`, plus `complete: false` only when the Activity tab lists fewer scheduled tasks than its header counts. A group is `title` plus `items` of `name` `time`
 - `activity`: the same `groups` shape; an item is `title` `detail` `time`
 - `memory`: `backend` `state` `chars` `sections` `text` `error` `hint`
 - `chats`: `backend` `state` `count` `chats` `error` `hint`. Each chat is `title` `is_current` `kind` (`main` or `side`), plus `session_id` on `--backend api`. With no side chats, `count` is the main chat only. On the new shell `title` may be null

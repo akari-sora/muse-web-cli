@@ -25,7 +25,13 @@ from muse_web_cli.model import (
     missing_keys,
     _status,
 )
-from muse_web_cli.selectors import TAB_ACTIVITY, TAB_PENDING, TAB_UPCOMING
+from muse_web_cli.selectors import (
+    SCHEDULED_HEADERS,
+    SCHEDULED_PARTIAL_HINT,
+    TAB_ACTIVITY,
+    TAB_PENDING,
+    TAB_UPCOMING,
+)
 
 
 @dataclass
@@ -241,10 +247,39 @@ def collect_pending(driver) -> dict:
     return pending_payload(items, backend="browser")
 
 
+def _scheduled_total(title: str) -> int | None:
+    for pattern in SCHEDULED_HEADERS:
+        found = pattern.match(title)
+        if found:
+            return int(found.group(1))
+    return None
+
+
 def collect_upcoming(driver) -> dict:
-    groups = _groups(driver, TAB_UPCOMING, "upcoming")
-    if isinstance(groups, dict):
-        return groups
+    snap = driver.snapshot()
+    status = assess(snap)
+    if status["state"] != "ok":
+        return _fail("upcoming", status)
+    total = None
+    try:
+        groups = driver.read_groups(TAB_UPCOMING)
+    except PageChanged as exc:
+        # The driver raises this from the locator count, before any click: the page has no Upcoming tab.
+        if exc.missing != "upcoming_tab":
+            return _page_error("upcoming", exc.missing)
+        try:
+            activity = driver.read_groups(TAB_ACTIVITY)
+        except PageChanged as inner:
+            return _page_error("upcoming", inner.missing)
+        if not activity:
+            return _page_error("upcoming", "upcoming_tab")
+        # Only the scheduled-tasks group; the dated groups under it are activity.
+        groups, total = [], 0
+        for group in activity:
+            found = _scheduled_total(group.get("title") or "")
+            if found is not None:
+                groups.append(group)
+                total += found
     shaped = []
     for group in groups:
         items = [
@@ -252,7 +287,11 @@ def collect_upcoming(driver) -> dict:
             for row in group.get("items") or []
         ]
         shaped.append({"title": group.get("title") or "", "items": items})
-    return grouped_payload(shaped, backend="browser")
+    payload = grouped_payload(shaped, backend="browser")
+    if total is not None and total > payload["count"]:
+        payload["complete"] = False
+        payload["hint"] = SCHEDULED_PARTIAL_HINT.format(total=total, shown=payload["count"])
+    return payload
 
 
 def collect_activity(driver) -> dict:

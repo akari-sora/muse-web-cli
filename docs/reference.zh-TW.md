@@ -112,7 +112,7 @@ muse-web-cli --json pending
 - `send TEXT` — `insertText` 加 Enter，只送一次。文字若以 `-` 開頭，前面加 `--`。`--wait` 預設關。`--timeout` 預設 120，必須大於 0。逾時不會重送。`--wait` 只接受送出前快照之後才出現的回覆，聊天很長也一樣。`--session ID` 只在 `--backend api` 有效；瀏覽器後端給了會以結束碼 2 拒絕，不會送出。`muse-web-cli send --wait --timeout 120 -- "文字"`
 - `send --attach FILE`（可重複）— 透過 Muse 視窗上傳檔案再送出，只送一次；檔案不存在或不是一般檔案時結束碼 2，什麼都不送。`--attach-sha256 HEX`（可重複，依 `--attach` 的順序）：檔案只讀一次，Muse 拿到的就是算過雜湊的那份位元組（50 MB 內直接交給瀏覽器，更大的先寫成只有自己能讀的暫存副本）；不符就結束碼 2，什麼都不上傳、不送。加 `--session ID` 時先打開那則副聊天室（`muse.ai/thread/<ID>`），送完回主聊天室；有 `--backend api` 憑證時用 api 等回覆。檔案沒附上就不送訊息，並從輸入框移除已附上的檔案（Muse 可能已經收下上傳的檔案）。頁面沒有顯示那則副聊天室（`muse.ai/thread/<ID>`）就什麼都不送。送完回不了主聊天室時仍回報已送出，並在 `warning` 註明。`muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "解壓縮…"`
 - `pending` — 只讀核可項目，不點核可或拒絕。`muse-web-cli pending`
-- `upcoming` — 只讀近期，不點列。`muse-web-cli upcoming`
+- `upcoming` — 只讀排定任務，不點列。Muse 拿掉了近期分頁；頁面沒有近期分頁時，`upcoming` 只讀動態分頁裡的排定任務那一組（標題像「2項排定任務」或 "2 scheduled tasks"），不含下面按日期分的那幾組。沒有那一組時 `count` 是 0。標題寫的數量比面板列出的多時，`complete` 是 `false`，hint 指向 `--backend api upcoming`；不會點「查看所有排定任務」。`muse-web-cli upcoming`
 - `activity` — 只讀動態，不點列。`muse-web-cli activity`
 - `memory` — 只讀 MEMORY.md 的 `innerText`，不聚焦、不打字。`muse-web-cli memory`
 - `chats` — 列出已經打開的側欄裡的主聊天室與副聊天室。側欄關著時不點開關，`state` 是 `ui_changed`，hint 是「請在 Muse 打開側欄後重試」。不點「新副聊天室」，也不會打開任何一則。新版介面的主標題可能是 null。`muse-web-cli chats`
@@ -121,7 +121,7 @@ muse-web-cli --json pending
 - `login` — 開有視窗的 Chrome，等你登入。`muse-web-cli login`
 - `start` — 啟動專用 Chrome，或接上已經在跑的那一個。`--headless` 是預設（`--headless=new`）。`--headed` 顯示視窗。兩個旗標不能一起用。`muse-web-cli start --headless`
 - `stop` — 只停止這個工具自己啟動的進程。`muse-web-cli stop`
-- `selftest` — 檢查選擇器在不在，不點任何東西。切換鈕必須在。`muse-web-cli selftest`
+- `selftest` — 檢查選擇器在不在，不點任何東西。切換鈕必須在。`upcoming_tab` 會列在 `present`，但不是必要的。`muse-web-cli selftest`
 
 `--json` 的鍵：
 
@@ -129,7 +129,7 @@ muse-web-cli --json pending
 - `messages`：`backend` `state` `name` `lines` `messages` `error` `hint`。每則是 `role` `text` `presentation`
 - `send`：`backend` `state` `attempted` `sent` `text` `reply` `presentation` `elapsed_ms` `error` `hint`
 - `pending`：`backend` `state` `count` `items` `error` `hint`。item 是 `title` `detail` `time`
-- `upcoming`：`backend` `state` `count` `groups` `error` `hint`。group 是 `title` 與 `items`（`name` `time`）
+- `upcoming`：`backend` `state` `count` `groups` `error` `hint`；動態分頁列出的排定任務比標題寫的少時，另有 `complete: false`。group 是 `title` 與 `items`（`name` `time`）
 - `activity`：同樣有 `groups`，item 是 `title` `detail` `time`
 - `memory`：`backend` `state` `chars` `sections` `text` `error` `hint`
 - `chats`：`backend` `state` `count` `chats` `error` `hint`。每一則是 `title` `is_current` `kind`（`main` 或 `side`），`--backend api` 另有 `session_id`。沒有副聊天室時 `count` 是主聊天室那一則。新版介面的 `title` 可能是 null
