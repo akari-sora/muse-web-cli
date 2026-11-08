@@ -158,7 +158,8 @@ class CdpPage:
         self.page.keyboard.press("Backspace")
 
     def open_thread(self, session_id: str | None) -> None:
-        """Show one chat in the window: a side chat by its session id, or the main chat (None)."""
+        """Show one chat in the window: a side chat by its session id, or the main chat (None).
+        PageChanged("session") when the page ends up showing another chat."""
         if session_id is not None and not re.fullmatch(r"[0-9a-fA-F-]{8,64}", session_id):
             raise PageChanged("session")
         self.page.goto(THREAD_URL.format(session_id) if session_id else MUSE_URL)
@@ -166,6 +167,10 @@ class CdpPage:
         # The composer is server-rendered before the page is live; the chat log comes after.
         self._wait_until(lambda: self.page.locator(COMPOSER).count() > 0 and self.page.locator(LOG).count() > 0, "composer", timeout=45.0)
         time.sleep(2.0)
+        # Muse sends an unknown or foreign thread back to the main chat, and it still has a composer.
+        host, path = _host_path(self.page.url)
+        if not (host == "muse.ai" or host.endswith(".muse.ai")) or path.rstrip("/") != (f"/thread/{session_id}" if session_id else ""):
+            raise PageChanged("session")
 
     def attach_files(self, paths: list[str]) -> None:
         """Attach files through the composer's file input; the attach button is never clicked."""

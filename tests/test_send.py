@@ -222,3 +222,73 @@ def test_an_attachment_prefix_does_not_hide_the_sent_message():
             Message("assistant", "done", busy=False, streaming=False, has_actions=True)]
     assert user_count(rows, "unzip it") == 1
     assert reply_text(rows, "unzip it") == ("done", False)
+
+
+SIDE = "f551b46a-2db4-4419-aff5-b8c40af46167"
+
+
+def test_a_send_that_went_out_stays_sent_when_the_window_cannot_go_back_to_main():
+    from muse_web_cli.errors import BrowserDown, PageChanged
+
+    outcome = WaitResult(False, "reply", [Message("user", "x"), Message("assistant", "ok", busy=False, streaming=False, has_actions=True)])
+    for error in (PageChanged("composer"), BrowserDown("target closed"), RuntimeError("Timeout 30000ms exceeded")):
+        class Stuck(AttachDriver):
+            def open_thread(self, session, error=error):
+                super().open_thread(session)
+                if session is None:
+                    raise error
+
+        payload = BrowserBackend(Stuck(outcome), headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session=SIDE)
+        assert payload["state"] == "ok" and payload["sent"] is True and payload["reply"] == "ok", payload
+        assert "main chat" in payload["warning"]
+
+
+def test_a_side_chat_that_does_not_show_sends_nothing():
+    from muse_web_cli.errors import PageChanged
+
+    class Elsewhere(AttachDriver):
+        def open_thread(self, session):
+            super().open_thread(session)
+            if session:
+                raise PageChanged("session")
+
+    driver = Elsewhere()
+    payload = BrowserBackend(driver, headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session=SIDE)
+    assert payload["state"] == "ui_changed" and payload["sent"] is False and payload["attempted"] is False
+    assert "nothing was sent" in payload["error"]
+    assert "insert" not in driver.calls and not any(isinstance(c, tuple) and c[0] == "attach" for c in driver.calls)
+    assert driver.calls[-1] == ("open", None)
+
+
+class _ThreadPage:
+    def __init__(self, lands_on):
+        self.url = "about:blank"
+        self.lands_on = lands_on
+
+    def goto(self, url):
+        self.url = self.lands_on(url)
+
+    def wait_for_load_state(self, state):
+        pass
+
+    def locator(self, selector):
+        class Found:
+            def count(self):
+                return 1
+
+        return Found()
+
+
+def test_open_thread_checks_that_the_page_shows_that_chat(monkeypatch):
+    from muse_web_cli.driver import CdpPage
+    from muse_web_cli.errors import PageChanged
+
+    monkeypatch.setattr("muse_web_cli.driver.time.sleep", lambda seconds: None)
+    CdpPage(_ThreadPage(lambda url: url), None).open_thread(SIDE)
+    CdpPage(_ThreadPage(lambda url: url), None).open_thread(None)
+    for landing in ("https://muse.ai/", "https://muse.ai/thread/0000aaaa-other", f"https://evil.example/thread/{SIDE}"):
+        with pytest.raises(PageChanged) as caught:
+            CdpPage(_ThreadPage(lambda url, landing=landing: landing), None).open_thread(SIDE)
+        assert caught.value.missing == "session"
+    with pytest.raises(PageChanged):
+        CdpPage(_ThreadPage(lambda url: f"https://muse.ai/thread/{SIDE}"), None).open_thread(None)

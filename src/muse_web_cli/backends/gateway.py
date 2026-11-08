@@ -600,7 +600,11 @@ class MuseGateway:
                 else:
                     clear_current(self.credential)
             current = read_current(self.credential)
-            return chats_payload(chats_from(data, current=current), backend="api")
+            payload = chats_payload(chats_from(data, current=current), backend="api")
+            if action == "create":
+                # The id Muse returned for this chat: a caller that deletes it later deletes only its own.
+                payload["created"] = new_id
+            return payload
 
         return self._guard("chats", run)
 
