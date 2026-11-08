@@ -124,11 +124,24 @@ def perform_send(driver, text: str, *, wait: bool, timeout: float, attach: list[
             hint=status.get("hint"),
         )
     before = user_count(snap.messages, text)
+
+    def maybe_sent(reason: str) -> dict:
+        # Enter was (or may have been) pressed: never report this as not sent.
+        return send_payload(
+            backend="browser",
+            state="timeout",
+            text=text,
+            attempted=True,
+            sent=False,
+            elapsed_ms=int((time.monotonic() - started) * 1000),
+            error=f"{reason}; the message may have been sent",
+            hint="nothing was sent again",
+        )
+
     try:
         if attach:
             driver.attach_files(attach)
         driver.insert_text(text)
-        driver.press_enter()
     except PageChanged as exc:
         if attach and exc.missing != "composer_not_empty":
             driver.clear_attachments()
@@ -143,32 +156,18 @@ def perform_send(driver, text: str, *, wait: bool, timeout: float, attach: list[
             error=error,
             hint=None,
         )
-    # Enter was pressed: from here on, losing the page means the message may have been sent.
+    # From the key press on, any failure means the message may have been sent.
+    try:
+        driver.press_enter()
+    except Exception as exc:  # noqa: BLE001
+        return maybe_sent(f"the Enter key press failed ({type(exc).__name__})")
     try:
         outcome = driver.wait_outcome(text=text, before_count=before, wait=wait, timeout=timeout)
-    except Exception as exc:  # noqa: BLE001 — any failure after Enter is "unknown", never "not sent"
-        return send_payload(
-            backend="browser",
-            state="timeout",
-            text=text,
-            attempted=True,
-            sent=False,
-            elapsed_ms=int((time.monotonic() - started) * 1000),
-            error=f"lost the page after Enter ({type(exc).__name__}); the message may have been sent",
-            hint="nothing was sent again",
-        )
+    except Exception as exc:  # noqa: BLE001
+        return maybe_sent(f"lost the page after Enter ({type(exc).__name__})")
     elapsed = int((time.monotonic() - started) * 1000)
     if outcome.phase == "missing":
-        return send_payload(
-            backend="browser",
-            state="ui_changed",
-            text=text,
-            attempted=True,
-            sent=False,
-            elapsed_ms=elapsed,
-            error="Muse 頁面結構對不上",
-            hint=None,
-        )
+        return maybe_sent("the page changed after Enter")
     arrived = user_count(outcome.messages, text) > before
     if not arrived:
         return send_payload(

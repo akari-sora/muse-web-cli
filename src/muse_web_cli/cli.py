@@ -282,7 +282,11 @@ def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text
         try:
             return fn(page, ready)
         finally:
-            page.disconnect()
+            # A failed disconnect must not replace what the command already did (a send that went out).
+            try:
+                page.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _chat_mutation(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:

@@ -336,3 +336,39 @@ def test_every_use_of_the_window_holds_the_page_lock(monkeypatch, tmp_path):
     out = cli._with_page(settings, mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: {"state": "ok"})
     assert out == {"state": "ok"}
     assert held == [paths.page_lock, "disconnect"]
+
+
+def test_every_failure_from_the_enter_key_on_is_maybe_sent():
+    class EnterFails(FakeDriver):
+        def press_enter(self):
+            raise RuntimeError("Target closed")
+
+    class Missing(FakeDriver):
+        def wait_outcome(self, **kwargs):
+            return WaitResult(False, "missing", [])
+
+    for driver in (EnterFails(), Missing()):
+        payload = perform_send(driver, "hi", wait=True, timeout=5)
+        assert payload["state"] == "timeout" and payload["attempted"] is True, payload
+        assert "may have been sent" in payload["error"]
+
+
+def test_a_failed_disconnect_keeps_the_send_result(monkeypatch, tmp_path):
+    import contextlib
+
+    from muse_web_cli import cli
+    from muse_web_cli.config import paths_for
+
+    class Page:
+        def disconnect(self):
+            raise RuntimeError("browser gone")
+
+    monkeypatch.setattr(cli, "file_lock", lambda path: contextlib.nullcontext())
+    monkeypatch.setattr(cli, "_ensure", lambda settings, **kw: {"state": "ok", "port": 9333})
+    monkeypatch.setattr(cli, "connect", lambda port: Page())
+
+    class Settings:
+        paths = paths_for(tmp_path)
+
+    sent = {"state": "ok", "sent": True}
+    assert cli._with_page(Settings(), mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: sent) is sent
