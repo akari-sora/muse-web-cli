@@ -9,6 +9,8 @@ Nothing in this module is a credential, cookie, or endpoint.
 
 from __future__ import annotations
 
+import re
+
 
 def labeled(element: str, labels: tuple[str, ...]) -> str:
     return ", ".join(f'{element}[aria-label="{label}"]' for label in labels)
@@ -74,9 +76,17 @@ SIDEBAR_CLOSED_HINT = "請在 Muse 打開側欄後重試"
 
 PANEL = "[data-hatch-status-panel-card]"
 TAB_PENDING = labeled("button", ("核可工具", "Approvals"))
+# Older pages only. Muse dropped the Upcoming tab; upcoming then reads the Activity tab.
 TAB_UPCOMING = labeled("button", ("近期", "Upcoming"))
 TAB_ACTIVITY = labeled("button", ("動態", "Activity"))
 TAB_IDENTITY = labeled("button", ("身分", "Identity"))
+# The Activity tab's group of scheduled tasks is headed by their number, e.g. 「2項排定任務」.
+# English is a best-effort equivalent.
+SCHEDULED_HEADERS = (
+    re.compile(r"^\s*(\d+)\s*項排定任務\s*$"),
+    re.compile(r"^\s*(\d+)\s+scheduled tasks?\s*$", re.IGNORECASE),
+)
+SCHEDULED_PARTIAL_HINT = "動態分頁只列出 {total} 項排定任務中的 {shown} 項；完整清單：muse-web-cli --backend api upcoming"
 PANEL_CLOSE = '[data-testid="hatch-status-panel-close"]'
 
 # Reopens the panel after the file editor collapses it. The <img> twin is not a button.
@@ -120,13 +130,14 @@ KEY_SELECTORS = {
 # Required only when the status panel is already open (selftest does not open it).
 PANEL_TAB_SELECTORS = {
     "pending_tab": TAB_PENDING,
-    "upcoming_tab": TAB_UPCOMING,
     "activity_tab": TAB_ACTIVITY,
     "identity_tab": TAB_IDENTITY,
 }
 
 # Reported, never required: they are absent unless a tab, a draft, or a reply is open.
+# The Upcoming tab is gone from current Muse pages.
 OPTIONAL_SELECTORS = {
+    "upcoming_tab": TAB_UPCOMING,
     "panel": PANEL,
     "memory_file": MEMORY_FILE,
     "editor": EDITOR,

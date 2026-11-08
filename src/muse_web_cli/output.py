@@ -91,6 +91,9 @@ def human(payload: dict) -> str:
         return f"chars={payload.get('chars')} sections={sections}\n{body}".rstrip()
     if "groups" in payload:
         lines = [f"count={payload.get('count')} groups={len(payload.get('groups') or [])}"]
+        if payload.get("complete") is False:
+            lines[0] += " complete=false"
+            lines.append(f"hint={payload.get('hint') or ''}")
         for group in payload.get("groups") or []:
             lines.append(f"[{group.get('title') or ''}]")
             for item in group.get("items") or []:

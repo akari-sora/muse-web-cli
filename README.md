@@ -72,7 +72,7 @@ What each one prints: [Output examples](docs/reference.md#output-examples).
 | `messages` | recent messages, oldest to newest (`--limit`, default 20, capped at 100) |
 | `send` | send once (`--wait`, `--timeout`, `--attach FILE`, `--attach-sha256 HEX`); a timeout never resends |
 | `pending` | read approvals; does not approve or reject |
-| `upcoming` | read the upcoming tab; does not click a row |
+| `upcoming` | read scheduled tasks (the upcoming tab, or the activity tab's scheduled group); does not click a row |
 | `activity` | read the activity tab; does not click a row |
 | `memory` | read MEMORY.md `innerText`; does not focus or type |
 | `chats` | list the main and side chats; `--create`, `--rename`, `--delete`, `--switch` with `--backend api` only |
