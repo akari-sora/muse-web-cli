@@ -26,6 +26,7 @@ from muse_web_cli.model import (
     _status,
 )
 from muse_web_cli.selectors import (
+    EDITOR_CLOSE,
     SCHEDULED_HEADERS,
     SCHEDULED_PARTIAL_HINT,
     TAB_ACTIVITY,
@@ -73,11 +74,28 @@ def _blank(snap: Snapshot, status: dict) -> bool:
     )
 
 
+def ready_snapshot(driver) -> Snapshot:
+    """The page, after closing a file editor left open over the chat.
+
+    Muse can leave MEMORY.md open in its full-page editor (seen 2026-11-09 after a migration); it
+    hides the composer, so every command answered `ui_changed`. Only the editor's own close button is
+    clicked, and only when the editor is up and the composer is not.
+    """
+    snap = driver.snapshot()
+    if snap.selectors.get("editor") and not snap.has_composer:
+        try:
+            driver.click(EDITOR_CLOSE)
+        except PageChanged:
+            return snap
+        snap = driver.snapshot()
+    return snap
+
+
 def settled_snapshot(driver, *, sleep=None, clock=None) -> tuple[Snapshot, dict]:
     """A just-started Chrome may not have rendered anything we know yet."""
     sleep = sleep or time.sleep
     clock = clock or time.monotonic
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     deadline = clock() + SETTLE_SECONDS
     while _blank(snap, status) and clock() < deadline:
@@ -219,7 +237,7 @@ def perform_send(driver, text: str, *, wait: bool, timeout: float, attach: list[
 
 
 def _groups(driver, target: str, kind: str) -> list[dict] | dict:
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     if status["state"] != "ok":
         return _fail(kind, status)
@@ -256,7 +274,7 @@ def _scheduled_total(title: str) -> int | None:
 
 
 def collect_upcoming(driver) -> dict:
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     if status["state"] != "ok":
         return _fail("upcoming", status)
@@ -313,7 +331,7 @@ def collect_activity(driver) -> dict:
 
 
 def collect_chats(driver) -> dict:
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     if status["state"] != "ok":
         return empty_like("chats", status)
@@ -339,7 +357,7 @@ def collect_chats(driver) -> dict:
 
 
 def collect_memory(driver) -> dict:
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     if status["state"] != "ok":
         return empty_like("memory", status)
@@ -351,7 +369,7 @@ def collect_memory(driver) -> dict:
 
 
 def collect_selftest(driver) -> dict:
-    snap = driver.snapshot()
+    snap = ready_snapshot(driver)
     status = assess(snap)
     present = dict(snap.selectors)
     if status["state"] in {"session_expired", "region_blocked"}:

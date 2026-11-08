@@ -201,3 +201,48 @@ def test_public_message_hides_internal_flags():
         "text": "x",
         "presentation": False,
     }
+
+
+def test_a_file_editor_left_over_the_chat_is_closed_before_the_command():
+    from muse_web_cli.flow import collect_status
+    from muse_web_cli.selectors import EDITOR_CLOSE
+
+    covered = ok_snapshot(has_composer=False)
+    covered.selectors["editor"] = True
+    clear = ok_snapshot()
+    clear.selectors["editor"] = False
+    clicks = []
+
+    class Driver:
+        def __init__(self):
+            self.closed = False
+
+        def snapshot(self):
+            return clear if self.closed else covered
+
+        def click(self, selector):
+            clicks.append(selector)
+            self.closed = True
+
+        def read_groups(self, target):
+            return []
+
+    status = collect_status(Driver())
+    assert clicks == [EDITOR_CLOSE]
+    assert status["state"] == "ok"
+
+
+def test_an_open_editor_with_the_composer_still_there_is_left_alone():
+    from muse_web_cli.flow import ready_snapshot
+
+    shown = ok_snapshot()
+    shown.selectors["editor"] = True
+
+    class Driver:
+        def snapshot(self):
+            return shown
+
+        def click(self, selector):
+            raise AssertionError("nothing is clicked")
+
+    assert ready_snapshot(Driver()) is shown

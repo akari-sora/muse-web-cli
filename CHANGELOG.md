@@ -1,5 +1,9 @@
 # Changelog
 
+## [0.1.8] - 2026-11-09
+
+- Every command first closes a file editor left open over the chat. Muse can leave MEMORY.md open in its full-page editor (seen after a migration on 2026-11-09); it hides the composer, so `status`, `send`, `upcoming` and the rest answered `ui_changed` until the editor was closed by hand. Only the editor's own close button is clicked, and only when the editor is up and the composer is not.
+
 ## [0.1.7] - 2026-11-09
 
 - Muse removed the Upcoming tab from the status panel and moved scheduled tasks into the Activity tab, as its first group (「2項排定任務」). On such a page `upcoming` reads only that group from the Activity tab, in the same `name` / `time` shape, and leaves out the dated groups below it; 0.1.6 returned `ui_changed`. A page that still has the Upcoming tab is read as before. The missing tab is found from the locator count, so no extra control is clicked.
