@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from muse_web_cli.backends.browser import BrowserBackend
 from muse_web_cli.flow import WaitResult, perform_send
 from muse_web_cli.model import Message
@@ -372,3 +374,79 @@ def test_a_failed_disconnect_keeps_the_send_result(monkeypatch, tmp_path):
 
     sent = {"state": "ok", "sent": True}
     assert cli._with_page(Settings(), mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: sent) is sent
+
+
+def test_attach_sha256_mismatch_exits_2_before_the_window_is_used(tmp_path, monkeypatch, capsys):
+    import hashlib
+
+    from muse_web_cli import cli
+
+    def no_window(*args, **kwargs):
+        raise AssertionError("the Muse window was used")
+
+    monkeypatch.setattr(cli, "_with_page", no_window)
+    monkeypatch.setattr(cli, "_ensure", no_window)
+    bundle = tmp_path / "bundle.zip"
+    bundle.write_bytes(b"PK one")
+    good = hashlib.sha256(b"PK one").hexdigest()
+    for shas in (["0" * 64], [good, good], ["xyz"]):
+        argv = ["send", "hi", "--attach", str(bundle)]
+        for sha in shas:
+            argv += ["--attach-sha256", sha]
+        assert cli.main(argv, home=tmp_path) == 2
+        err = capsys.readouterr().err
+        assert "--attach-sha256" in err and "nothing was uploaded or sent" in err, err
+
+
+def test_the_hashed_bytes_are_the_bytes_playwright_gets(tmp_path, monkeypatch):
+    import hashlib
+    import os
+
+    from muse_web_cli import cli
+
+    bundle = tmp_path / "bundle.zip"
+    bundle.write_bytes(b"PK one")
+    files = cli._read_attachments([str(bundle)], [hashlib.sha256(b"PK one").hexdigest().upper()])
+    assert files == [("bundle.zip", "application/zip", b"PK one")]
+    bundle.write_bytes(b"PK swapped")  # later changes to the file do not reach the upload
+    with cli._uploads(files) as given:
+        assert given == [{"name": "bundle.zip", "mimeType": "application/zip", "buffer": b"PK one"}]
+    # Above Playwright's buffer limit: a private copy written from the same bytes.
+    monkeypatch.setattr(cli, "_BUFFER_LIMIT", 1)
+    with cli._uploads(files) as given:
+        (path,) = given
+        assert Path(path).name == "bundle.zip" and Path(path).read_bytes() == b"PK one"
+        if os.name != "nt":
+            assert Path(path).stat().st_mode & 0o777 == 0o600
+            assert Path(path).parent.parent.stat().st_mode & 0o777 == 0o700
+    assert not Path(path).exists()
+
+
+def test_attach_files_hands_the_payloads_to_the_file_input(monkeypatch):
+    from muse_web_cli.driver import CdpPage
+    from muse_web_cli.selectors import ATTACHMENT, FILE_INPUT
+
+    monkeypatch.setattr("muse_web_cli.driver.time.sleep", lambda seconds: None)
+    given = []
+
+    class Page:
+        def locator(self, selector):
+            page = self
+
+            class Locator:
+                first = None
+
+                def count(self):
+                    return len(given[-1]) if selector == ATTACHMENT and given else 0
+
+                def set_input_files(self, files):
+                    assert selector == FILE_INPUT
+                    given.append(files)
+
+            found = Locator()
+            found.first = found
+            return found
+
+    payload = [{"name": "bundle.zip", "mimeType": "application/zip", "buffer": b"PK one"}]
+    CdpPage(Page(), None).attach_files(payload)
+    assert given == [payload]

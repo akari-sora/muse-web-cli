@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import re
 import time
-from pathlib import Path
 from urllib.parse import urlsplit
 
 from muse_web_cli.errors import BrowserDown, PageChanged
@@ -172,11 +171,11 @@ class CdpPage:
         if not (host == "muse.ai" or host.endswith(".muse.ai")) or path.rstrip("/") != (f"/thread/{session_id}" if session_id else ""):
             raise PageChanged("session")
 
-    def attach_files(self, paths: list[str]) -> None:
-        """Attach files through the composer's file input; the attach button is never clicked."""
+    def attach_files(self, files: list) -> None:
+        """Attach files through the composer's file input; the attach button is never clicked.
+        `files` is what set_input_files takes: paths, or {name, mimeType, buffer} payloads."""
         if self.page.locator(ATTACHMENT).count():
             raise PageChanged("composer_not_empty")
-        files = [str(Path(p)) for p in paths]
         # A page that is still starting ignores the files; set them again only while none showed up.
         for _ in range(3):
             self.page.locator(FILE_INPUT).first.set_input_files(files)

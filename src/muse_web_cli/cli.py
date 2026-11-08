@@ -6,9 +6,14 @@ The command is muse-web-cli. Meta's Muse Code agent already owns the name `muse`
 from __future__ import annotations
 
 import argparse
+import hashlib
+import mimetypes
 import os
+import re
 import sys
+import tempfile
 import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from muse_web_cli import __version__
@@ -102,6 +107,12 @@ def build_parser() -> argparse.ArgumentParser:
         action="append",
         metavar="FILE",
         help="attach a file (repeatable); sent through the Muse window, also with --session (default: none)",
+    )
+    send.add_argument(
+        "--attach-sha256",
+        action="append",
+        metavar="HEX",
+        help="expected sha256 of each --attach file, in the same order; a file whose bytes differ stops the send (default: not checked)",
     )
     send.add_argument("--wait", action="store_true", help="wait for the assistant reply (default: off)")
     send.add_argument(
@@ -323,19 +334,62 @@ def _bad_attachment(paths: list[str]) -> str | None:
     return None
 
 
-def _send_files(settings: Settings, browser, args: argparse.Namespace, attach: list[str]) -> dict:
+def _bad_sha256(paths: list[str], shas: list[str]) -> str | None:
+    if shas and (len(shas) != len(paths) or not all(re.fullmatch(r"[0-9a-fA-F]{64}", sha) for sha in shas)):
+        return "--attach-sha256 needs one 64-hex value per --attach, in the same order; nothing was uploaded or sent"
+    return None
+
+
+def _read_attachments(paths: list[str], shas: list[str]) -> list[tuple[str, str, bytes]]:
+    """(name, mime type, bytes) of each file, read once. These bytes are the ones uploaded, so a
+    file given with --attach-sha256 is checked against exactly what Muse gets."""
+    files = []
+    for index, item in enumerate(paths):
+        path = Path(item).expanduser().resolve()
+        data = path.read_bytes()
+        if shas and hashlib.sha256(data).hexdigest() != shas[index].lower():
+            raise ConfigError(f"--attach {item} does not match its --attach-sha256; nothing was uploaded or sent")
+        files.append((path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream", data))
+    return files
+
+
+# Playwright refuses set_input_files buffers above 50 MB (all files of one call together).
+_BUFFER_LIMIT = 50 * 1024 * 1024
+
+
+@contextmanager
+def _uploads(files: list[tuple[str, str, bytes]]):
+    """What the file input gets: the read bytes as buffers, or above Playwright's buffer limit,
+    private copies (0600 in a 0700 temporary folder) written from those same bytes."""
+    if sum(len(data) for _, _, data in files) <= _BUFFER_LIMIT:
+        yield [{"name": name, "mimeType": mime, "buffer": data} for name, mime, data in files]
+        return
+    with tempfile.TemporaryDirectory(prefix="muse-attach-") as tmp:
+        paths = []
+        for index, (name, _, data) in enumerate(files):
+            folder = Path(tmp) / str(index)  # one folder each, so two files may share a name
+            folder.mkdir(mode=0o700)
+            fd = os.open(folder / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+            paths.append(str(folder / name))
+        yield paths
+
+
+def _send_files(settings: Settings, browser, args: argparse.Namespace, files: list[tuple[str, str, bytes]]) -> dict:
     """The window uploads and sends once; with a saved credential the reply is read through the
     api backend, which reads a side chat by its session id and sees the attachment prefix."""
     session = getattr(args, "session", None)
     api = ApiBackend(settings.paths.credential) if settings.paths.credential.exists() else None
-    if not (args.wait and api):
-        return browser.send(args.text, wait=args.wait, timeout=args.timeout, attach=attach, session=session)
-    started = time.monotonic()
-    snap = api.messages(_API_SNAPSHOT, session=session or "main")
-    prior = snap.get("messages") if snap.get("state") == "ok" and isinstance(snap.get("messages"), list) else None
-    if prior is None:
-        return browser.send(args.text, wait=True, timeout=args.timeout, attach=attach, session=session)
-    first = browser.send(args.text, wait=False, timeout=args.timeout, attach=attach, session=session)
+    with _uploads(files) as attach:
+        if not (args.wait and api):
+            return browser.send(args.text, wait=args.wait, timeout=args.timeout, attach=attach, session=session)
+        started = time.monotonic()
+        snap = api.messages(_API_SNAPSHOT, session=session or "main")
+        prior = snap.get("messages") if snap.get("state") == "ok" and isinstance(snap.get("messages"), list) else None
+        if prior is None:
+            return browser.send(args.text, wait=True, timeout=args.timeout, attach=attach, session=session)
+        first = browser.send(args.text, wait=False, timeout=args.timeout, attach=attach, session=session)
     if first.get("state") != "ok" or not first.get("sent"):
         return first
     return api.wait_reply(args.text, first=first, prior=prior, session=session, timeout=args.timeout, started=started)
@@ -345,7 +399,7 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
     action, session, title = _chat_mutation(args)
     # An upload only exists in the Muse page, so a send with files always uses the window;
     # --session then opens that side chat by its URL and returns to the main chat afterwards.
-    attach = [str(Path(p).expanduser().resolve()) for p in (getattr(args, "attach", None) or [])]
+    attach = _read_attachments(getattr(args, "attach", None) or [], getattr(args, "attach_sha256", None) or []) if command == "send" else []
     if settings.backend == "api" and not (command == "send" and attach):
         backend = ApiBackend(settings.paths.credential)
         if command == "status":
@@ -498,8 +552,8 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
         if args.command == "send" and args.timeout <= 0:
             print("timeout must be > 0", file=sys.stderr)
             return 2
-        if args.command == "send" and args.attach:
-            bad = _bad_attachment(args.attach)
+        if args.command == "send" and (args.attach or args.attach_sha256):
+            bad = _bad_attachment(args.attach or []) or _bad_sha256(args.attach or [], args.attach_sha256 or [])
             if bad:
                 print(bad, file=sys.stderr)
                 return 2
