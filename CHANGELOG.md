@@ -8,6 +8,7 @@
 - A sent message is never reported as not sent: every failure from the Enter key on (the key press, the page changing, the page going away while waiting) is `attempted: true`, "may have been sent". A failed disconnect no longer replaces the result.
 - One lock (`~/.trinity-cli/muse-web-cli.page.lock`) around every use of the Muse window, so two commands cannot interleave.
 - `chats --create` returns the new chat's id as `created`.
+- `cryptography` 50 (was capped below 47): fixes GHSA-537c, GHSA-jwv3 and GHSA-g6cj (#1). Only X25519, AES-GCM and key serialization are used.
 
 ## [0.1.5] - 2026-10-08
 
