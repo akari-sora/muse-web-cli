@@ -143,7 +143,20 @@ def perform_send(driver, text: str, *, wait: bool, timeout: float, attach: list[
             error=error,
             hint=None,
         )
-    outcome = driver.wait_outcome(text=text, before_count=before, wait=wait, timeout=timeout)
+    # Enter was pressed: from here on, losing the page means the message may have been sent.
+    try:
+        outcome = driver.wait_outcome(text=text, before_count=before, wait=wait, timeout=timeout)
+    except Exception as exc:  # noqa: BLE001 — any failure after Enter is "unknown", never "not sent"
+        return send_payload(
+            backend="browser",
+            state="timeout",
+            text=text,
+            attempted=True,
+            sent=False,
+            elapsed_ms=int((time.monotonic() - started) * 1000),
+            error=f"lost the page after Enter ({type(exc).__name__}); the message may have been sent",
+            hint="nothing was sent again",
+        )
     elapsed = int((time.monotonic() - started) * 1000)
     if outcome.phase == "missing":
         return send_payload(

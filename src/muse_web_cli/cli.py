@@ -270,18 +270,19 @@ def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text
     ready = _ensure(settings, mode=mode, headless=headless)
     if ready["state"] != "ok":
         return _not_ready(ready, kind, text)
-    try:
-        page = connect(ready["port"])
-    except BrowserDown as exc:
-        failed = dict(ready)
-        failed["state"] = "browser_down"
-        failed["error"] = exc.error
-        failed["hint"] = exc.hint or ready.get("hint")
-        return _not_ready(failed, kind, text)
-    try:
-        return fn(page, ready)
-    finally:
-        page.disconnect()
+    with file_lock(settings.paths.page_lock):
+        try:
+            page = connect(ready["port"])
+        except BrowserDown as exc:
+            failed = dict(ready)
+            failed["state"] = "browser_down"
+            failed["error"] = exc.error
+            failed["hint"] = exc.hint or ready.get("hint")
+            return _not_ready(failed, kind, text)
+        try:
+            return fn(page, ready)
+        finally:
+            page.disconnect()
 
 
 def _chat_mutation(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:

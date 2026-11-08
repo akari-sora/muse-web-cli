@@ -292,3 +292,47 @@ def test_open_thread_checks_that_the_page_shows_that_chat(monkeypatch):
         assert caught.value.missing == "session"
     with pytest.raises(PageChanged):
         CdpPage(_ThreadPage(lambda url: f"https://muse.ai/thread/{SIDE}"), None).open_thread(None)
+
+
+def test_losing_the_page_after_enter_is_unknown_never_not_sent():
+    class Lost(FakeDriver):
+        def wait_outcome(self, **kwargs):
+            raise RuntimeError("Target closed")
+
+    payload = perform_send(Lost(), "hi", wait=True, timeout=5)
+    assert payload["state"] == "timeout"
+    assert payload["attempted"] is True
+    assert "may have been sent" in payload["error"]
+    assert payload["hint"] == "nothing was sent again"
+
+
+def test_every_use_of_the_window_holds_the_page_lock(monkeypatch, tmp_path):
+    import contextlib
+
+    from muse_web_cli import cli
+    from muse_web_cli.config import paths_for
+
+    held = []
+
+    @contextlib.contextmanager
+    def recording_lock(path):
+        held.append(path)
+        yield
+
+    class Page:
+        def disconnect(self):
+            held.append("disconnect")
+
+    monkeypatch.setattr(cli, "file_lock", recording_lock)
+    monkeypatch.setattr(cli, "_ensure", lambda settings, **kw: {"state": "ok", "port": 9333})
+    monkeypatch.setattr(cli, "connect", lambda port: Page())
+    paths = paths_for(tmp_path)
+
+    class Settings:
+        pass
+
+    settings = Settings()
+    settings.paths = paths
+    out = cli._with_page(settings, mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: {"state": "ok"})
+    assert out == {"state": "ok"}
+    assert held == [paths.page_lock, "disconnect"]
