@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from muse_web_cli.backends.browser import BrowserBackend
 from muse_web_cli.flow import WaitResult, perform_send
 from muse_web_cli.model import Message
@@ -163,3 +165,288 @@ def test_memory_closes_editor_without_typing():
         guard_click('[data-pel-click="connector_mail"]')
     with pytest.raises(Exception):
         guard_click('[data-testid="hatch-file-editor-maximize"]')
+
+
+class AttachDriver(FakeDriver):
+    def __init__(self, *args, fail_attach=False, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fail_attach = fail_attach
+
+    def attach_files(self, paths):
+        self.calls.append(("attach", tuple(paths)))
+        if self.fail_attach:
+            from muse_web_cli.errors import PageChanged
+
+            raise PageChanged("attachment")
+
+    def clear_attachments(self):
+        self.calls.append("clear")
+
+    def open_thread(self, session):
+        self.calls.append(("open", session))
+
+
+def test_attachments_go_in_before_the_text_and_send_once():
+    outcome = WaitResult(False, "reply", [Message("user", "unzip"), Message("assistant", "done", busy=False, streaming=False, has_actions=True)])
+    driver = AttachDriver(outcome)
+    payload = perform_send(driver, "unzip", wait=True, timeout=5, attach=["/tmp/a.zip"])
+    assert payload["state"] == "ok" and payload["reply"] == "done"
+    assert driver.calls.index(("attach", ("/tmp/a.zip",))) < driver.calls.index("insert") < driver.calls.index("enter")
+
+
+def test_a_file_that_does_not_attach_sends_nothing_and_is_removed():
+    driver = AttachDriver(fail_attach=True)
+    payload = perform_send(driver, "unzip", wait=True, timeout=5, attach=["/tmp/a.zip"])
+    assert payload["state"] == "ui_changed" and payload["sent"] is False and payload["attempted"] is False
+    assert "did not attach" in payload["error"]
+    assert "clear" in driver.calls and "insert" not in driver.calls
+
+
+def test_a_side_chat_send_opens_its_url_and_returns_to_main():
+    outcome = WaitResult(False, "reply", [Message("user", "x"), Message("assistant", "ok", busy=False, streaming=False, has_actions=True)])
+    driver = AttachDriver(outcome)
+    BrowserBackend(driver, headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session="f551b46a-2db4-4419-aff5-b8c40af46167")
+    assert driver.calls[0] == ("open", "f551b46a-2db4-4419-aff5-b8c40af46167")
+    assert driver.calls[-1] == ("open", None)
+
+
+def test_attach_needs_a_regular_file(tmp_path, capsys):
+    from muse_web_cli.cli import main
+
+    assert main(["send", "hi", "--attach", str(tmp_path / "missing.zip")]) == 2
+    assert "--attach needs a regular file" in capsys.readouterr().err
+
+
+def test_an_attachment_prefix_does_not_hide_the_sent_message():
+    from muse_web_cli.model import reply_text, user_count
+
+    rows = [Message("user", "[file:application/zip workspace/user/files/b.zip] unzip it"),
+            Message("assistant", "done", busy=False, streaming=False, has_actions=True)]
+    assert user_count(rows, "unzip it") == 1
+    assert reply_text(rows, "unzip it") == ("done", False)
+
+
+SIDE = "f551b46a-2db4-4419-aff5-b8c40af46167"
+
+
+def test_a_send_that_went_out_stays_sent_when_the_window_cannot_go_back_to_main():
+    from muse_web_cli.errors import BrowserDown, PageChanged
+
+    outcome = WaitResult(False, "reply", [Message("user", "x"), Message("assistant", "ok", busy=False, streaming=False, has_actions=True)])
+    for error in (PageChanged("composer"), BrowserDown("target closed"), RuntimeError("Timeout 30000ms exceeded")):
+        class Stuck(AttachDriver):
+            def open_thread(self, session, error=error):
+                super().open_thread(session)
+                if session is None:
+                    raise error
+
+        payload = BrowserBackend(Stuck(outcome), headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session=SIDE)
+        assert payload["state"] == "ok" and payload["sent"] is True and payload["reply"] == "ok", payload
+        assert "main chat" in payload["warning"]
+
+
+def test_a_side_chat_that_does_not_show_sends_nothing():
+    from muse_web_cli.errors import PageChanged
+
+    class Elsewhere(AttachDriver):
+        def open_thread(self, session):
+            super().open_thread(session)
+            if session:
+                raise PageChanged("session")
+
+    driver = Elsewhere()
+    payload = BrowserBackend(driver, headless=True).send("x", wait=True, timeout=5, attach=["/tmp/a.zip"], session=SIDE)
+    assert payload["state"] == "ui_changed" and payload["sent"] is False and payload["attempted"] is False
+    assert "nothing was sent" in payload["error"]
+    assert "insert" not in driver.calls and not any(isinstance(c, tuple) and c[0] == "attach" for c in driver.calls)
+    assert driver.calls[-1] == ("open", None)
+
+
+class _ThreadPage:
+    def __init__(self, lands_on):
+        self.url = "about:blank"
+        self.lands_on = lands_on
+
+    def goto(self, url):
+        self.url = self.lands_on(url)
+
+    def wait_for_load_state(self, state):
+        pass
+
+    def locator(self, selector):
+        class Found:
+            def count(self):
+                return 1
+
+        return Found()
+
+
+def test_open_thread_checks_that_the_page_shows_that_chat(monkeypatch):
+    from muse_web_cli.driver import CdpPage
+    from muse_web_cli.errors import PageChanged
+
+    monkeypatch.setattr("muse_web_cli.driver.time.sleep", lambda seconds: None)
+    CdpPage(_ThreadPage(lambda url: url), None).open_thread(SIDE)
+    CdpPage(_ThreadPage(lambda url: url), None).open_thread(None)
+    for landing in ("https://muse.ai/", "https://muse.ai/thread/0000aaaa-other", f"https://evil.example/thread/{SIDE}"):
+        with pytest.raises(PageChanged) as caught:
+            CdpPage(_ThreadPage(lambda url, landing=landing: landing), None).open_thread(SIDE)
+        assert caught.value.missing == "session"
+    with pytest.raises(PageChanged):
+        CdpPage(_ThreadPage(lambda url: f"https://muse.ai/thread/{SIDE}"), None).open_thread(None)
+
+
+def test_losing_the_page_after_enter_is_unknown_never_not_sent():
+    class Lost(FakeDriver):
+        def wait_outcome(self, **kwargs):
+            raise RuntimeError("Target closed")
+
+    payload = perform_send(Lost(), "hi", wait=True, timeout=5)
+    assert payload["state"] == "timeout"
+    assert payload["attempted"] is True
+    assert "may have been sent" in payload["error"]
+    assert payload["hint"] == "nothing was sent again"
+
+
+def test_every_use_of_the_window_holds_the_page_lock(monkeypatch, tmp_path):
+    import contextlib
+
+    from muse_web_cli import cli
+    from muse_web_cli.config import paths_for
+
+    held = []
+
+    @contextlib.contextmanager
+    def recording_lock(path):
+        held.append(path)
+        yield
+
+    class Page:
+        def disconnect(self):
+            held.append("disconnect")
+
+    monkeypatch.setattr(cli, "file_lock", recording_lock)
+    monkeypatch.setattr(cli, "_ensure", lambda settings, **kw: {"state": "ok", "port": 9333})
+    monkeypatch.setattr(cli, "connect", lambda port: Page())
+    paths = paths_for(tmp_path)
+
+    class Settings:
+        pass
+
+    settings = Settings()
+    settings.paths = paths
+    out = cli._with_page(settings, mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: {"state": "ok"})
+    assert out == {"state": "ok"}
+    assert held == [paths.page_lock, "disconnect"]
+
+
+def test_every_failure_from_the_enter_key_on_is_maybe_sent():
+    class EnterFails(FakeDriver):
+        def press_enter(self):
+            raise RuntimeError("Target closed")
+
+    class Missing(FakeDriver):
+        def wait_outcome(self, **kwargs):
+            return WaitResult(False, "missing", [])
+
+    for driver in (EnterFails(), Missing()):
+        payload = perform_send(driver, "hi", wait=True, timeout=5)
+        assert payload["state"] == "timeout" and payload["attempted"] is True, payload
+        assert "may have been sent" in payload["error"]
+
+
+def test_a_failed_disconnect_keeps_the_send_result(monkeypatch, tmp_path):
+    import contextlib
+
+    from muse_web_cli import cli
+    from muse_web_cli.config import paths_for
+
+    class Page:
+        def disconnect(self):
+            raise RuntimeError("browser gone")
+
+    monkeypatch.setattr(cli, "file_lock", lambda path: contextlib.nullcontext())
+    monkeypatch.setattr(cli, "_ensure", lambda settings, **kw: {"state": "ok", "port": 9333})
+    monkeypatch.setattr(cli, "connect", lambda port: Page())
+
+    class Settings:
+        paths = paths_for(tmp_path)
+
+    sent = {"state": "ok", "sent": True}
+    assert cli._with_page(Settings(), mode="use", headless=True, kind="send", text="x", fn=lambda page, ready: sent) is sent
+
+
+def test_attach_sha256_mismatch_exits_2_before_the_window_is_used(tmp_path, monkeypatch, capsys):
+    import hashlib
+
+    from muse_web_cli import cli
+
+    def no_window(*args, **kwargs):
+        raise AssertionError("the Muse window was used")
+
+    monkeypatch.setattr(cli, "_with_page", no_window)
+    monkeypatch.setattr(cli, "_ensure", no_window)
+    bundle = tmp_path / "bundle.zip"
+    bundle.write_bytes(b"PK one")
+    good = hashlib.sha256(b"PK one").hexdigest()
+    for shas in (["0" * 64], [good, good], ["xyz"]):
+        argv = ["send", "hi", "--attach", str(bundle)]
+        for sha in shas:
+            argv += ["--attach-sha256", sha]
+        assert cli.main(argv, home=tmp_path) == 2
+        err = capsys.readouterr().err
+        assert "--attach-sha256" in err and "nothing was uploaded or sent" in err, err
+
+
+def test_the_hashed_bytes_are_the_bytes_playwright_gets(tmp_path, monkeypatch):
+    import hashlib
+    import os
+
+    from muse_web_cli import cli
+
+    bundle = tmp_path / "bundle.zip"
+    bundle.write_bytes(b"PK one")
+    files = cli._read_attachments([str(bundle)], [hashlib.sha256(b"PK one").hexdigest().upper()])
+    assert files == [("bundle.zip", "application/zip", b"PK one")]
+    bundle.write_bytes(b"PK swapped")  # later changes to the file do not reach the upload
+    with cli._uploads(files) as given:
+        assert given == [{"name": "bundle.zip", "mimeType": "application/zip", "buffer": b"PK one"}]
+    # Above Playwright's buffer limit: a private copy written from the same bytes.
+    monkeypatch.setattr(cli, "_BUFFER_LIMIT", 1)
+    with cli._uploads(files) as given:
+        (path,) = given
+        assert Path(path).name == "bundle.zip" and Path(path).read_bytes() == b"PK one"
+        if os.name != "nt":
+            assert Path(path).stat().st_mode & 0o777 == 0o600
+            assert Path(path).parent.parent.stat().st_mode & 0o777 == 0o700
+    assert not Path(path).exists()
+
+
+def test_attach_files_hands_the_payloads_to_the_file_input(monkeypatch):
+    from muse_web_cli.driver import CdpPage
+    from muse_web_cli.selectors import ATTACHMENT, FILE_INPUT
+
+    monkeypatch.setattr("muse_web_cli.driver.time.sleep", lambda seconds: None)
+    given = []
+
+    class Page:
+        def locator(self, selector):
+            page = self
+
+            class Locator:
+                first = None
+
+                def count(self):
+                    return len(given[-1]) if selector == ATTACHMENT and given else 0
+
+                def set_input_files(self, files):
+                    assert selector == FILE_INPUT
+                    given.append(files)
+
+            found = Locator()
+            found.first = found
+            return found
+
+    payload = [{"name": "bundle.zip", "mimeType": "application/zip", "buffer": b"PK one"}]
+    CdpPage(Page(), None).attach_files(payload)
+    assert given == [payload]

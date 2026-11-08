@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from dataclasses import dataclass, field
 
 from muse_web_cli.selectors import (
@@ -47,6 +49,14 @@ def exit_for(state: str) -> int:
 
 def norm(text: str) -> str:
     return " ".join((text or "").split())
+
+
+# Muse stores an attached file as a "[file:<mime> <path>]" prefix on the user's text.
+_FILE_PREFIX = re.compile(r"^(?:\s*\[file:[^\]\n]*\])+\s*")
+
+
+def without_files(text: str) -> str:
+    return _FILE_PREFIX.sub("", text or "")
 
 
 @dataclass
@@ -144,7 +154,7 @@ def is_settled(message: Message) -> bool:
 
 def user_count(messages: list[Message], text: str) -> int:
     wanted = norm(text)
-    return sum(1 for item in visible_messages(messages) if item.role == "user" and norm(item.text) == wanted)
+    return sum(1 for item in visible_messages(messages) if item.role == "user" and norm(without_files(item.text)) == wanted)
 
 
 def reply_after(messages: list[Message], text: str) -> list[Message]:
@@ -152,7 +162,7 @@ def reply_after(messages: list[Message], text: str) -> list[Message]:
     index = -1
     wanted = norm(text)
     for i, item in enumerate(shown):
-        if item.role == "user" and norm(item.text) == wanted:
+        if item.role == "user" and norm(without_files(item.text)) == wanted:
             index = i
     if index < 0:
         return []

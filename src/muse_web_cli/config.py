@@ -19,6 +19,9 @@ class Paths:
     state: Path
     credential: Path
     lock: Path
+    # Held for every use of the shared Muse window (open a chat, attach, type, send, read), so two
+    # commands never interleave on one page.
+    page_lock: Path
 
 
 def paths_for(home: Path | None = None) -> Paths:
@@ -29,6 +32,7 @@ def paths_for(home: Path | None = None) -> Paths:
         state=root / "muse-web-cli-state.json",
         credential=root / "muse-credential",
         lock=root / "muse-web-cli.lock",
+        page_lock=root / "muse-web-cli.page.lock",
     )
 
 

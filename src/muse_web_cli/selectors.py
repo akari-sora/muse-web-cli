@@ -195,6 +195,12 @@ BOT_PHRASES = (
 MEMORY_SECTIONS = ("Facts", "Preferences", "Commitments")
 
 MUSE_URL = "https://muse.ai/"
+# A side chat has its own URL: MUSE_URL + "thread/" + session id.
+THREAD_URL = MUSE_URL + "thread/{}"
+# Files go in through the composer's hidden file input (set_input_files); the attach button
+# (chat_tap_attachment) is never clicked. Each attached file shows a remove button.
+FILE_INPUT = 'input[type="file"]'
+ATTACHMENT = '[data-pel-click="chat_remove_attachment_click"]'
 LOGIN_HINT = "muse-web-cli login"
 API_UNAVAILABLE = (
     "找不到 ~/.trinity-cli/muse-credential。"

@@ -436,6 +436,15 @@ class ApiBackend:
             return gateway.messages(limit, session=session)
         return self._run("messages", query={"limit": limit})
 
+    def wait_reply(self, text: str, *, first: dict, prior: list, session: str | None, timeout: float, started: float) -> dict:
+        """Wait for the reply to a message the Muse window sent (an upload). Never sends."""
+        gateway = self._muse("send", text)
+        if gateway is None:
+            return {**first, "state": "timeout", "error": "this credential cannot read replies", "hint": "nothing was sent again"}
+        if isinstance(gateway, dict):
+            return gateway
+        return gateway.wait_reply(text, first=first, prior=prior, session=session, timeout=timeout, started=started)
+
     def send(self, text: str, *, wait: bool, timeout: float, session: str | None = None) -> dict:
         gateway = self._muse("send", text)
         if gateway is not None:

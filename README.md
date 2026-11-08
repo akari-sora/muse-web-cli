@@ -30,20 +30,20 @@ trinity-cli 系列的一部分。Part of the trinity-cli family.
 
 ### 安裝
 
-v0.1.5。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.5`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.6。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.6`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
 muse-web-cli --version
 ```
 
@@ -144,12 +144,13 @@ muse-web-cli --json pending
 - `status` — 工作階段、待核可數量、最新助理訊息是不是卡片。`muse-web-cli status`
 - `messages --limit N` — 由舊到新。預設 20，最小 1，超過 100 會截成 100。離畫面外的列是虛擬化的。`--session ID` 只在 `--backend api` 有效。`muse-web-cli messages --limit 20`
 - `send TEXT` — `insertText` 加 Enter，只送一次。文字若以 `-` 開頭，前面加 `--`。`--wait` 預設關。`--timeout` 預設 120，必須大於 0。逾時不會重送。`--wait` 只接受送出前快照之後才出現的回覆，聊天很長也一樣。`--session ID` 只在 `--backend api` 有效；瀏覽器後端給了會以結束碼 2 拒絕，不會送出。`muse-web-cli send --wait --timeout 120 -- "文字"`
+- `send --attach FILE`（可重複）— 透過 Muse 視窗上傳檔案再送出，只送一次；檔案不存在或不是一般檔案時結束碼 2，什麼都不送。`--attach-sha256 HEX`（可重複，依 `--attach` 的順序）：檔案只讀一次，Muse 拿到的就是算過雜湊的那份位元組（50 MB 內直接交給瀏覽器，更大的先寫成只有自己能讀的暫存副本）；不符就結束碼 2，什麼都不上傳、不送。加 `--session ID` 時先打開那則副聊天室（`muse.ai/thread/<ID>`），送完回主聊天室；有 `--backend api` 憑證時用 api 等回覆。檔案沒附上就不送訊息，並從輸入框移除已附上的檔案（Muse 可能已經收下上傳的檔案）。頁面沒有顯示那則副聊天室（`muse.ai/thread/<ID>`）就什麼都不送。送完回不了主聊天室時仍回報已送出，並在 `warning` 註明。`muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "解壓縮…"`
 - `pending` — 只讀核可項目，不點核可或拒絕。`muse-web-cli pending`
 - `upcoming` — 只讀近期，不點列。`muse-web-cli upcoming`
 - `activity` — 只讀動態，不點列。`muse-web-cli activity`
 - `memory` — 只讀 MEMORY.md 的 `innerText`，不聚焦、不打字。`muse-web-cli memory`
 - `chats` — 列出已經打開的側欄裡的主聊天室與副聊天室。側欄關著時不點開關，`state` 是 `ui_changed`，hint 是「請在 Muse 打開側欄後重試」。不點「新副聊天室」，也不會打開任何一則。新版介面的主標題可能是 null。`muse-web-cli chats`
-- `chats --create [--title T]`、`--rename ID --title T`、`--delete ID`、`--switch ID|main` — 只在 `--backend api`。`ID` 是 `chats` 列出的 `session_id`，四個動作用同一套 id。`--create` 會把新聊天室設成目前這一則。`--delete` 不接受主聊天室；`--rename`、`--delete` 碰到沒列出的 id 會拒絕，不送出。`muse-web-cli --backend api chats --switch main`
+- `chats --create [--title T]`、`--rename ID --title T`、`--delete ID`、`--switch ID|main` — 只在 `--backend api`。`ID` 是 `chats` 列出的 `session_id`，四個動作用同一套 id。`--create` 會把新聊天室設成目前這一則，`--json` 的 `created` 是它的 id。`--delete` 不接受主聊天室；`--rename`、`--delete` 碰到沒列出的 id 會拒絕，不送出。`muse-web-cli --backend api chats --switch main`
 - `credential` — 從已登入的頁面取得 gateway token，只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。沒登入會先走 `login`。`muse-web-cli credential`
 - `login` — 開有視窗的 Chrome，等你登入。`muse-web-cli login`
 - `start` — 啟動專用 Chrome，或接上已經在跑的那一個。`--headless` 是預設（`--headless=new`）。`--headed` 顯示視窗。兩個旗標不能一起用。`muse-web-cli start --headless`
@@ -227,7 +228,7 @@ muse-web-cli credential
 
 ### 安全
 
-記憶體只讀。不會點設定、連接器、邀請、附加檔案、新的副聊天室、記憶工具列、核可或拒絕。不讀 cookie，不開 CDP 的 Network / Storage，也不印出 token。`credential` 把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600）。`--backend api` 用這份憑證呼叫 gateway。印出的 `error`、`hint` 會先清掉 `auth_token=`、`Bearer`、JWT 這類字串；訊息內文不改。
+記憶體只讀。不會點設定、連接器、邀請、附加檔案按鈕（`send --attach` 直接把檔案放進輸入框的檔案欄位）、新的副聊天室、記憶工具列、核可或拒絕。不讀 cookie，不開 CDP 的 Network / Storage，也不印出 token。`credential` 把 gateway token 只寫進 `~/.trinity-cli/muse-credential`（mode 600）。`--backend api` 用這份憑證呼叫 gateway。印出的 `error`、`hint` 會先清掉 `auth_token=`、`Bearer`、JWT 這類字串；訊息內文不改。
 
 ### 排解
 
@@ -293,20 +294,20 @@ Supported systems: see [Platforms](#platforms).
 
 ### Install
 
-v0.1.5. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.5`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.6. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.6`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.5"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.6"
 muse-web-cli --version
 ```
 
@@ -407,12 +408,13 @@ Global flags may appear before or after the command:
 - `status` — session, pending count, and whether the latest assistant message is a card. `muse-web-cli status`
 - `messages --limit N` — oldest to newest. Default 20, minimum 1, values above 100 are capped at 100. Off-screen rows are virtualized. `--session ID` works only with `--backend api`. `muse-web-cli messages --limit 20`
 - `send TEXT` — insertText and Enter, once. Put `--` before text that starts with `-`. `--wait` defaults off. `--timeout` defaults to 120 and must be > 0. A timeout never resends. `--wait` accepts only a reply that appears after the pre-send snapshot, in long chats too. `--session ID` works only with `--backend api`; the browser backend refuses it with exit 2 and sends nothing. `muse-web-cli send --wait --timeout 120 -- "text"`
+- `send --attach FILE` (repeatable) — uploads through the Muse window and sends once; a missing or non-regular file exits 2 and sends nothing. `--attach-sha256 HEX` (repeatable, in `--attach` order): each file is read once and Muse gets exactly the hashed bytes (handed to the browser directly up to 50 MB, above that through a private temporary copy); a mismatch exits 2 and nothing is uploaded or sent. With `--session ID` it opens that side chat (`muse.ai/thread/<ID>`) and returns to the main chat afterwards; with an `--backend api` credential the reply is read through the api. If a file does not attach, no message is sent and the attached files are removed from the composer (Muse may already have stored the upload). If the page does not show that side chat (`muse.ai/thread/<ID>`), nothing is sent. If the window cannot go back to the main chat afterwards, the send is still reported as sent, with a `warning`. `muse-web-cli --backend api send --session ID --attach bundle.zip --wait -- "unzip …"`
 - `pending` — read approvals. It does not approve or reject. `muse-web-cli pending`
 - `upcoming` — read the upcoming tab. It does not click a row. `muse-web-cli upcoming`
 - `activity` — read the activity tab. It does not click a row. `muse-web-cli activity`
 - `memory` — read MEMORY.md `innerText`. It does not focus or type. `muse-web-cli memory`
 - `chats` — list the main chat and any side chats already showing in the sidebar. A closed sidebar is not clicked; `state` is `ui_changed` and the hint is「請在 Muse 打開側欄後重試」. It does not click "新副聊天室" / new side chat, and it does not open a chat. On the new shell the main `title` may be null. `muse-web-cli chats`
-- `chats --create [--title T]`, `--rename ID --title T`, `--delete ID`, `--switch ID|main` — `--backend api` only. `ID` is the `session_id` that `chats` lists; all four use the same ids. `--create` makes the new chat the switched one. `--delete` refuses the main chat; `--rename` and `--delete` refuse an id that was not listed and send nothing. `muse-web-cli --backend api chats --switch main`
+- `chats --create [--title T]`, `--rename ID --title T`, `--delete ID`, `--switch ID|main` — `--backend api` only. `ID` is the `session_id` that `chats` lists; all four use the same ids. `--create` makes the new chat the switched one; `--json` has its id in `created`. `--delete` refuses the main chat; `--rename` and `--delete` refuse an id that was not listed and send nothing. `muse-web-cli --backend api chats --switch main`
 - `credential` — get the gateway token from the logged-in page and write it only into `~/.trinity-cli/muse-credential` (mode 600). It never prints it. Runs `login` first when the session is missing. `muse-web-cli credential`
 - `login` — open a headed window so you can log in. `muse-web-cli login`
 - `start` — start the dedicated Chrome, or attach if it is already running. `--headless` is the default (`--headless=new`). `--headed` shows the window. The two flags cannot be combined. `muse-web-cli start --headless`
@@ -490,7 +492,7 @@ A missing file, or no `vm_id` and no endpoint for that command, is exit 4. HTTP 
 
 ### Safety
 
-Memory is read-only. The tool never clicks settings, connectors, invites, attach, a new side chat, the memory toolbar, or approve/reject. It does not read cookies, enable the CDP Network or Storage domains, or print a token. `credential` writes the gateway token only into `~/.trinity-cli/muse-credential` (mode 600). `--backend api` calls the gateway with that file. Printed `error` and `hint` text is scrubbed of `auth_token=`, `Bearer`, and JWT strings; message bodies are left as they are.
+Memory is read-only. The tool never clicks settings, connectors, invites, the attach button (`send --attach` puts files straight into the composer's file input), a new side chat, the memory toolbar, or approve/reject. It does not read cookies, enable the CDP Network or Storage domains, or print a token. `credential` writes the gateway token only into `~/.trinity-cli/muse-credential` (mode 600). `--backend api` calls the gateway with that file. Printed `error` and `hint` text is scrubbed of `auth_token=`, `Bearer`, and JWT strings; message bodies are left as they are.
 
 ### Troubleshooting
 

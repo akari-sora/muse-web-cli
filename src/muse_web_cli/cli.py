@@ -6,8 +6,14 @@ The command is muse-web-cli. Meta's Muse Code agent already owns the name `muse`
 from __future__ import annotations
 
 import argparse
+import hashlib
+import mimetypes
 import os
+import re
 import sys
+import tempfile
+import time
+from contextlib import contextmanager
 from pathlib import Path
 
 from muse_web_cli import __version__
@@ -96,6 +102,18 @@ def build_parser() -> argparse.ArgumentParser:
     send = sub.add_parser("send", help="type with insertText and press Enter once")
     send.add_argument("text", help="message text; put -- before it if it starts with a dash")
     send.add_argument("--session", help="side-chat session id for --backend api; omit to use the switched chat")
+    send.add_argument(
+        "--attach",
+        action="append",
+        metavar="FILE",
+        help="attach a file (repeatable); sent through the Muse window, also with --session (default: none)",
+    )
+    send.add_argument(
+        "--attach-sha256",
+        action="append",
+        metavar="HEX",
+        help="expected sha256 of each --attach file, in the same order; a file whose bytes differ stops the send (default: not checked)",
+    )
     send.add_argument("--wait", action="store_true", help="wait for the assistant reply (default: off)")
     send.add_argument(
         "--timeout",
@@ -263,18 +281,23 @@ def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text
     ready = _ensure(settings, mode=mode, headless=headless)
     if ready["state"] != "ok":
         return _not_ready(ready, kind, text)
-    try:
-        page = connect(ready["port"])
-    except BrowserDown as exc:
-        failed = dict(ready)
-        failed["state"] = "browser_down"
-        failed["error"] = exc.error
-        failed["hint"] = exc.hint or ready.get("hint")
-        return _not_ready(failed, kind, text)
-    try:
-        return fn(page, ready)
-    finally:
-        page.disconnect()
+    with file_lock(settings.paths.page_lock):
+        try:
+            page = connect(ready["port"])
+        except BrowserDown as exc:
+            failed = dict(ready)
+            failed["state"] = "browser_down"
+            failed["error"] = exc.error
+            failed["hint"] = exc.hint or ready.get("hint")
+            return _not_ready(failed, kind, text)
+        try:
+            return fn(page, ready)
+        finally:
+            # A failed disconnect must not replace what the command already did (a send that went out).
+            try:
+                page.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
 
 
 def _chat_mutation(args: argparse.Namespace) -> tuple[str | None, str | None, str | None]:
@@ -297,9 +320,87 @@ def _chat_mutation(args: argparse.Namespace) -> tuple[str | None, str | None, st
     return "switch", args.switch, None
 
 
+MAX_ATTACHMENT = 512 * 1024 * 1024
+_API_SNAPSHOT = 20
+
+
+def _bad_attachment(paths: list[str]) -> str | None:
+    for item in paths:
+        path = Path(item).expanduser()
+        if not path.is_file() or path.is_symlink():
+            return f"--attach needs a regular file: {item}"
+        if path.stat().st_size > MAX_ATTACHMENT:
+            return f"--attach file is larger than {MAX_ATTACHMENT} bytes: {item}"
+    return None
+
+
+def _bad_sha256(paths: list[str], shas: list[str]) -> str | None:
+    if shas and (len(shas) != len(paths) or not all(re.fullmatch(r"[0-9a-fA-F]{64}", sha) for sha in shas)):
+        return "--attach-sha256 needs one 64-hex value per --attach, in the same order; nothing was uploaded or sent"
+    return None
+
+
+def _read_attachments(paths: list[str], shas: list[str]) -> list[tuple[str, str, bytes]]:
+    """(name, mime type, bytes) of each file, read once. These bytes are the ones uploaded, so a
+    file given with --attach-sha256 is checked against exactly what Muse gets."""
+    files = []
+    for index, item in enumerate(paths):
+        path = Path(item).expanduser().resolve()
+        data = path.read_bytes()
+        if shas and hashlib.sha256(data).hexdigest() != shas[index].lower():
+            raise ConfigError(f"--attach {item} does not match its --attach-sha256; nothing was uploaded or sent")
+        files.append((path.name, mimetypes.guess_type(path.name)[0] or "application/octet-stream", data))
+    return files
+
+
+# Playwright refuses set_input_files buffers above 50 MB (all files of one call together).
+_BUFFER_LIMIT = 50 * 1024 * 1024
+
+
+@contextmanager
+def _uploads(files: list[tuple[str, str, bytes]]):
+    """What the file input gets: the read bytes as buffers, or above Playwright's buffer limit,
+    private copies (0600 in a 0700 temporary folder) written from those same bytes."""
+    if sum(len(data) for _, _, data in files) <= _BUFFER_LIMIT:
+        yield [{"name": name, "mimeType": mime, "buffer": data} for name, mime, data in files]
+        return
+    with tempfile.TemporaryDirectory(prefix="muse-attach-") as tmp:
+        paths = []
+        for index, (name, _, data) in enumerate(files):
+            folder = Path(tmp) / str(index)  # one folder each, so two files may share a name
+            folder.mkdir(mode=0o700)
+            fd = os.open(folder / name, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "wb") as handle:
+                handle.write(data)
+            paths.append(str(folder / name))
+        yield paths
+
+
+def _send_files(settings: Settings, browser, args: argparse.Namespace, files: list[tuple[str, str, bytes]]) -> dict:
+    """The window uploads and sends once; with a saved credential the reply is read through the
+    api backend, which reads a side chat by its session id and sees the attachment prefix."""
+    session = getattr(args, "session", None)
+    api = ApiBackend(settings.paths.credential) if settings.paths.credential.exists() else None
+    with _uploads(files) as attach:
+        if not (args.wait and api):
+            return browser.send(args.text, wait=args.wait, timeout=args.timeout, attach=attach, session=session)
+        started = time.monotonic()
+        snap = api.messages(_API_SNAPSHOT, session=session or "main")
+        prior = snap.get("messages") if snap.get("state") == "ok" and isinstance(snap.get("messages"), list) else None
+        if prior is None:
+            return browser.send(args.text, wait=True, timeout=args.timeout, attach=attach, session=session)
+        first = browser.send(args.text, wait=False, timeout=args.timeout, attach=attach, session=session)
+    if first.get("state") != "ok" or not first.get("sent"):
+        return first
+    return api.wait_reply(args.text, first=first, prior=prior, session=session, timeout=args.timeout, started=started)
+
+
 def _run_capability(settings: Settings, command: str, args: argparse.Namespace) -> dict:
     action, session, title = _chat_mutation(args)
-    if settings.backend == "api":
+    # An upload only exists in the Muse page, so a send with files always uses the window;
+    # --session then opens that side chat by its URL and returns to the main chat afterwards.
+    attach = _read_attachments(getattr(args, "attach", None) or [], getattr(args, "attach_sha256", None) or []) if command == "send" else []
+    if settings.backend == "api" and not (command == "send" and attach):
         backend = ApiBackend(settings.paths.credential)
         if command == "status":
             return backend.status()
@@ -315,7 +416,7 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
             "瀏覽器後端只讀聊天列表。建、改、刪、切換請加 --backend api，"
             "並先執行 muse-web-cli credential 寫好 ~/.trinity-cli/muse-credential。"
         )
-    if getattr(args, "session", None):
+    if getattr(args, "session", None) and not (command == "send" and attach):
         raise ConfigError(
             "--session 只在 --backend api 有效。瀏覽器後端讀寫的是 Muse 視窗目前開著的那一則。沒有送出。"
         )
@@ -326,6 +427,8 @@ def _run_capability(settings: Settings, command: str, args: argparse.Namespace) 
             return backend.status()
         if command == "messages":
             return backend.messages(args.limit)
+        if command == "send" and attach:
+            return _send_files(settings, backend, args, attach)
         if command == "send":
             return backend.send(args.text, wait=args.wait, timeout=args.timeout)
         return getattr(backend, command)()
@@ -449,6 +552,11 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
         if args.command == "send" and args.timeout <= 0:
             print("timeout must be > 0", file=sys.stderr)
             return 2
+        if args.command == "send" and (args.attach or args.attach_sha256):
+            bad = _bad_attachment(args.attach or []) or _bad_sha256(args.attach or [], args.attach_sha256 or [])
+            if bad:
+                print(bad, file=sys.stderr)
+                return 2
         if args.command == "credential":
             payload = _run_credential(settings)
         elif args.command in CAPABILITIES:

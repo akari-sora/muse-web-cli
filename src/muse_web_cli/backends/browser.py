@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from muse_web_cli.errors import BrowserDown
+from muse_web_cli.errors import BrowserDown, PageChanged
 from muse_web_cli.flow import (
     collect_activity,
     collect_chats,
@@ -15,6 +15,7 @@ from muse_web_cli.flow import (
     perform_send,
 )
 from muse_web_cli.model import browser_down, empty_like, send_payload
+from muse_web_cli.output import safe_text
 
 
 class BrowserBackend:
@@ -55,11 +56,34 @@ class BrowserBackend:
         except BrowserDown as exc:
             return self._down(exc, "messages")
 
-    def send(self, text: str, *, wait: bool, timeout: float) -> dict:
+    def send(self, text: str, *, wait: bool, timeout: float, attach: list[str] | None = None, session: str | None = None) -> dict:
         try:
-            return perform_send(self.driver, text, wait=wait, timeout=timeout)
+            if not session:
+                return perform_send(self.driver, text, wait=wait, timeout=timeout, attach=attach)
+            # A side chat is shown by its URL; the window goes back to the main chat afterwards.
+            try:
+                try:
+                    self.driver.open_thread(session)
+                except PageChanged:
+                    payload = send_payload(backend="browser", state="ui_changed", text=text,
+                                           error="the Muse window did not show that side chat; nothing was sent", hint=None)
+                else:
+                    payload = perform_send(self.driver, text, wait=wait, timeout=timeout, attach=attach, side_chat=True)
+            finally:
+                warning = self._back_to_main()
+            if warning:
+                payload["warning"] = warning
+            return payload
         except BrowserDown as exc:
             return self._down(exc, "send", text)
+
+    def _back_to_main(self) -> str:
+        """Best effort. A send that already happened is never reported as not sent because of this."""
+        try:
+            self.driver.open_thread(None)
+        except Exception as exc:
+            return f"the Muse window did not go back to the main chat: {safe_text(str(exc))}"
+        return ""
 
     def pending(self) -> dict:
         try:

@@ -282,6 +282,12 @@ def test_switch_accepts_the_id_the_list_prints(tmp_path):
         assert (tmp_path / "muse-current.json").stat().st_mode & 0o777 == 0o600
 
 
+def test_create_names_the_chat_it_created(tmp_path):
+    created = _backend(tmp_path, Script(_table())).chats(action="create", title="新聊天")
+    assert created["state"] == "ok"
+    assert created["created"] == "side-2"
+
+
 def test_create_without_an_id_is_not_ok(tmp_path):
     table = _table()
     table["/api/chats/start"] = (200, {"created": True})
