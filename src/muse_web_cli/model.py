@@ -318,7 +318,7 @@ def _chrome_label(text: str) -> bool:
 
 def _conversation_title(raw: str | None) -> str | None:
     """A chat name from a heading or document.title. Interface words are not names."""
-    text = " ".join(str(raw or "").split())
+    text = norm(str(raw or ""))
     if not text or _chrome_label(text):
         return None
     for sep in _TITLE_SEPS:

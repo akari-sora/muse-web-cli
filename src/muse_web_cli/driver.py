@@ -11,7 +11,7 @@ from urllib.parse import urlsplit
 
 from muse_web_cli.errors import BrowserDown, PageChanged
 from muse_web_cli.flow import WaitResult, message_from_raw
-from muse_web_cli.model import Snapshot, tab_selector, url_is_login
+from muse_web_cli.model import Snapshot, norm, tab_selector, url_is_login
 from muse_web_cli.nav import guard_click, read_chats_flow, read_memory_flow, read_with_tab
 from muse_web_cli.output import safe_text
 from muse_web_cli.probes import CHATS_JS, MEMORY_JS, OBSERVER_JS, PANEL_JS, PANEL_STATE_JS, SNAPSHOT_JS
@@ -132,7 +132,7 @@ class CdpPage:
 
     def _draft_matches(self, text: str) -> bool:
         value = self.page.locator(COMPOSER).first.input_value()
-        return " ".join(value.split()) == " ".join(text.split())
+        return norm(value) == norm(text)
 
     def insert_text(self, text: str) -> None:
         self.click(COMPOSER)
