@@ -4,7 +4,7 @@
 
 在終端機操作你已經登入的 Muse 網頁；加上 `--json` 時，每個指令印一個 JSON 物件。
 
-> 正本和 issue 在 <https://gitlab.com/aa22396584/muse-web-cli>。trinity-cli 系列的一部分。
+> 正本和 issue 在 <https://gitlab.com/aa22396584/muse-web-cli>。Release 與下載：<https://gitlab.com/aa22396584/muse-web-cli/-/releases>。GitHub 鏡像：<https://github.com/akari-sora/muse-web-cli>（issue 與 merge request 請開在 GitLab）。trinity-cli 系列的一部分。
 
 [![pipeline](https://gitlab.com/aa22396584/muse-web-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/commits/main)
 [![release](https://gitlab.com/aa22396584/muse-web-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/releases)

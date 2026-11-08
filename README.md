@@ -4,7 +4,7 @@ English | [繁體中文](README.zh-TW.md)
 
 Drive the Muse web app you are already logged into from a terminal; with `--json`, each command prints one JSON object.
 
-> Canonical repository and issues: <https://gitlab.com/aa22396584/muse-web-cli>. Part of the trinity-cli family.
+> Canonical repository and issues: <https://gitlab.com/aa22396584/muse-web-cli>. Releases and downloads: <https://gitlab.com/aa22396584/muse-web-cli/-/releases>. GitHub mirror: <https://github.com/akari-sora/muse-web-cli> (open issues and merge requests on GitLab). Part of the trinity-cli family.
 
 [![pipeline](https://gitlab.com/aa22396584/muse-web-cli/badges/main/pipeline.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/commits/main)
 [![release](https://gitlab.com/aa22396584/muse-web-cli/-/badges/release.svg)](https://gitlab.com/aa22396584/muse-web-cli/-/releases)
