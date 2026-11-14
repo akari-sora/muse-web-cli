@@ -39,10 +39,10 @@ test:
     - pip install "pytest>=8"
     - python -m pytest -q
 
-# Self-hosted Windows. Tags, manual web runs, and main pushes that change
-# shipped code, tests, or packaging. A CI-only push still runs Linux only.
-# Merge requests are manual: that runner accepts protected refs only, so an
-# unprotected source branch must not block the pipeline.
+# Self-hosted Windows. Offered on tags, merge requests, and main pushes that
+# change shipped code, tests, or packaging; it starts only when someone plays
+# it and may fail, so a Windows runner that is offline never holds up a
+# pipeline or a release. A manual web or API run starts it by itself.
 .windows_python: &windows_python
   interruptible: true
   timeout: 20m
@@ -77,6 +77,8 @@ test-windows:
       when: manual
       allow_failure: true
     - if: $CI_COMMIT_TAG
+      when: manual
+      allow_failure: true
     - if: $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "api"
     - if: $CI_COMMIT_BRANCH == "main"
       changes:
@@ -84,6 +86,8 @@ test-windows:
         - tests/**/*
         - pyproject.toml
         - uv.lock
+      when: manual
+      allow_failure: true
 
 # Same tests on a GitLab-hosted runner. Starts only when someone plays it.
 windows:hosted:

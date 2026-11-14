@@ -29,7 +29,7 @@ Windows (PowerShell): set `$env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"` before t
 
 ## CI
 
-GitLab CI runs the tests on Linux for every push and on Windows for merge requests (manual), tags, and `main`. A fork uses GitLab.com shared runners by default. Set the `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG` CI/CD variables to use other runners. There is no macOS CI; maintainers test macOS locally.
+GitLab CI runs the tests on Linux for every push. The Windows job is offered on merge requests, tags, and `main` but starts only when someone plays it, and it may fail without failing the pipeline, so an offline Windows runner never blocks a release; play it (or run the suite on a Windows machine with `uv run --group dev pytest -q`) before a release that touches process handling. A fork uses GitLab.com shared runners by default. Set the `LINUX_RUNNER_TAG` and `WINDOWS_RUNNER_TAG` CI/CD variables to use other runners. There is no macOS CI; maintainers test macOS locally.
 
 ## Release process (maintainers)
 
