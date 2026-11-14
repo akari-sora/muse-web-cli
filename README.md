@@ -22,20 +22,20 @@ You need Python 3.11+, uv or pipx, and Google Chrome or Chromium already install
 
 ## Install
 
-v0.1.8. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.8`. If the command is missing, add `~/.local/bin` to PATH.
+v0.1.9. After installing, `muse-web-cli --version` should print `muse-web-cli 0.1.9`. If the command is missing, add `~/.local/bin` to PATH.
 
 macOS and Linux:
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 ```
 
 Windows (PowerShell):
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 muse-web-cli --version
 ```
 
@@ -50,7 +50,7 @@ muse-web-cli status
 muse-web-cli start --headless
 ```
 
-`login` opens a headed window; the tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. `selftest` only checks selectors; `status` checks the session. After that, use can be headless. Profile, port, config file, and environment variables: [First-time setup](docs/reference.md#first-time-setup).
+`login` opens a headed window; the tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. `selftest` only checks selectors; `status` checks the session. After you are signed in, `login` closes its window and reopens the same profile headless, so the window cannot take your keyboard focus (`--keep-window` keeps it open). Profile, port, config file, and environment variables: [First-time setup](docs/reference.md#first-time-setup).
 
 ## Quick start
 

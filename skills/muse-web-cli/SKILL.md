@@ -38,6 +38,8 @@ For cross-agent tasks (ask all three, hand off, digest), use the `trinity-cli` s
 - `credential` — write the token only into `~/.trinity-cli/muse-credential` (mode 600) from the logged-in page; runs `login` first when the session is missing. Does not print the token.
 - `login` / `start` / `start --headed` / `start --headless` / `stop` / `selftest`
 
+**Do not leave the headed window running.** A visible Chrome that stays open after `login` takes keyboard focus whenever the page is driven. Current versions close it and relaunch the profile headless once `login` (or `credential`) sees you are signed in; `--keep-window` opts out. On an older install this does not happen, so after a successful `login` run `muse-web-cli stop` then `muse-web-cli start --headless`. Before any batch of commands, check `muse-web-cli --json status`; if it says `"headless":false`, switch the same way (the login lives in the profile and survives). Wait for the page to load after a switch; a `selftest` in the first seconds can report `ui_changed` with `log`/`avatar` missing on older versions, so run it again before believing it.
+
 `start` defaults to headless. If Chrome is already using the profile, attach; do not launch a second process. `stop` stops only the process this tool started. `selftest` clicks nothing and requires the chat switcher.
 
 ## Exit codes

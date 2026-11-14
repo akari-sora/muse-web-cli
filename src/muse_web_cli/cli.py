@@ -28,13 +28,16 @@ from muse_web_cli.chrome import (
     kill_pid,
     list_processes,
     port_open,
+    read_state,
     spawn,
     stop,
     wait_until_port,
+    write_state,
 )
 from muse_web_cli.config import ConfigError, Settings, resolve_settings
 from muse_web_cli.driver import connect
 from muse_web_cli.errors import BrowserDown
+from muse_web_cli.flow import wait_rendered
 from muse_web_cli.model import assess, browser_down, empty_like, exit_for, send_payload
 from muse_web_cli.output import emit, safe_text
 
@@ -59,6 +62,7 @@ def build_parser() -> argparse.ArgumentParser:
             "  muse-web-cli --json messages --limit 5\n"
             "  muse-web-cli send --wait --timeout 120 -- \"text\"\n"
             "  muse-web-cli credential\n"
+            "  muse-web-cli login --keep-window\n"
             "\n"
             "Global flags may appear before or after the command.\n"
             "Exit 0 ok.\n"
@@ -83,6 +87,14 @@ def build_parser() -> argparse.ArgumentParser:
         "--autostart",
         action="store_true",
         help="start headless Chrome when nothing is listening (default: off)",
+    )
+    parser.add_argument(
+        "--keep-window",
+        action="store_true",
+        help=(
+            "login and credential keep the visible Chrome window open (default: off; they relaunch it "
+            "headless once you are signed in, because a visible window takes keyboard focus)"
+        ),
     )
     parser.add_argument(
         "--chrome",
@@ -169,18 +181,23 @@ def configure_stdio() -> None:
             continue
 
 
-def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bool | None, object]:
+def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bool | None, object, bool | None]:
     cleaned: list[str] = []
     as_json = False
     port = None
     backend = None
     autostart = None
     chrome = None
+    keep_window = None
     index = 0
     while index < len(argv):
         item = argv[index]
         if item == "--json":
             as_json = True
+            index += 1
+            continue
+        if item == "--keep-window":
+            keep_window = True
             index += 1
             continue
         if item == "--autostart":
@@ -219,7 +236,7 @@ def _split_globals(argv: list[str]) -> tuple[list[str], bool, object, object, bo
             continue
         cleaned.append(item)
         index += 1
-    return cleaned, as_json, port, backend, autostart, chrome
+    return cleaned, as_json, port, backend, autostart, chrome, keep_window
 
 
 def _lifecycle(ready: dict, *, logged_in=None, hint=None, action=None) -> dict:
@@ -277,10 +294,94 @@ def _ensure(settings: Settings, *, mode: str, headless: bool) -> dict:
         )
 
 
+FOCUS_WARNING = (
+    "the Muse window is visible (headed) and can take your keyboard focus whenever this tool drives it. "
+    "Switch to headless: muse-web-cli stop && muse-web-cli start --headless "
+    "(the login stays in the profile; --keep-window or MUSE_WEB_KEEP_WINDOW=1 silences this)"
+)
+_focus_warned = False
+READY_SECONDS = 15.0
+
+
+def _focus_warning(settings: Settings, ready: dict) -> str | None:
+    """A tracked headed Chrome that a non-login command attaches to. Warn once on stderr; never switch it."""
+    global _focus_warned
+    if getattr(settings, "keep_window", False) or not ready.get("tracked") or ready.get("headless") is not False:
+        return None
+    if not _focus_warned:
+        _focus_warned = True
+        print(f"warning: {FOCUS_WARNING}", file=sys.stderr)
+    return FOCUS_WARNING
+
+
+def _page_status(settings: Settings, port: int) -> dict:
+    """Attach, wait (bounded) until the page has rendered, and read how it looks."""
+    with file_lock(settings.paths.page_lock):
+        page = connect(port)
+        try:
+            return wait_rendered(page, READY_SECONDS)[1]
+        finally:
+            try:
+                page.disconnect()
+            except Exception:  # noqa: BLE001
+                pass
+
+
+def _marked_for_login(settings: Settings, ready: dict) -> bool:
+    """True for the tracked headed Chrome that `login` opened and left for the person to sign in."""
+    if not ready.get("tracked") or ready.get("headless") is not False:
+        return False
+    state = read_state(settings.paths.state)
+    return state.get("opened_for") == "login" and state.get("pid") == ready.get("pid")
+
+
+def _set_marker(settings: Settings, ready: dict, marked: bool) -> None:
+    state = read_state(settings.paths.state)
+    if not state or state.get("pid") != ready.get("pid"):
+        return
+    if marked:
+        state["opened_for"] = "login"
+    else:
+        state.pop("opened_for", None)
+    write_state(settings.paths.state, state)
+
+
+def _switch_marked_window(settings: Settings, ready: dict) -> tuple[dict, str | None]:
+    """The window `login` left open for signing in: once the person is signed in, the next command
+    relaunches it headless first. Returns (ready for the command, note). A failed relaunch is reported
+    once (the new headless Chrome carries no marker, so nothing repeats)."""
+    if getattr(settings, "keep_window", False) or not _marked_for_login(settings, ready):
+        return ready, None
+    try:
+        status = _page_status(settings, ready["port"])
+    except BrowserDown:
+        return ready, None
+    if status["state"] != "ok":
+        return ready, None  # still on the sign-in page; keep the marker
+    moved = _go_headless(settings, {})
+    if "headless" not in moved:
+        _set_marker(settings, ready, False)  # could not close it; stop trying
+        return ready, None
+    if moved["state"] == "ok":
+        note = "the Muse window that login opened was closed and Chrome was relaunched headless, so it cannot take keyboard focus"
+        print(f"warning: {note}", file=sys.stderr)
+        return {"state": "ok", "port": moved["port"], "headless": True, "tracked": True, "action": moved["action"]}, note
+    failed = {"state": moved["state"], "port": moved["port"], "headless": True, "tracked": True}
+    failed["error"] = f"after the switch to headless: {moved['error'] or moved['state']}"
+    failed["hint"] = moved["hint"]
+    return failed, None
+
+
 def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text: str, fn):
     ready = _ensure(settings, mode=mode, headless=headless)
     if ready["state"] != "ok":
         return _not_ready(ready, kind, text)
+    note = None
+    if mode == "use":
+        ready, note = _switch_marked_window(settings, ready)
+        if ready["state"] != "ok":
+            return _not_ready(ready, kind, text)
+    warning = (note or _focus_warning(settings, ready)) if mode == "use" else None
     with file_lock(settings.paths.page_lock):
         try:
             page = connect(ready["port"])
@@ -291,7 +392,10 @@ def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text
             failed["hint"] = exc.hint or ready.get("hint")
             return _not_ready(failed, kind, text)
         try:
-            return fn(page, ready)
+            payload = fn(page, ready)
+            if warning and isinstance(payload, dict):
+                payload["warning"] = f"{payload['warning']}; {warning}" if payload.get("warning") else warning
+            return payload
         finally:
             # A failed disconnect must not replace what the command already did (a send that went out).
             try:
@@ -441,6 +545,11 @@ def _connect_page(settings: Settings):
     ready = _ensure(settings, mode="use", headless=True)
     if ready["state"] != "ok":
         return ready, None
+    ready, note = _switch_marked_window(settings, ready)
+    if ready["state"] != "ok":
+        return ready, None
+    if not note:
+        _focus_warning(settings, ready)
     try:
         return ready, connect(ready["port"])
     except BrowserDown as exc:
@@ -468,6 +577,36 @@ def _run_credential(settings: Settings) -> dict:
     )
 
 
+def _go_headless(settings: Settings, shown: dict) -> dict:
+    """Signed in: close the visible Chrome this tool started and reopen the same profile headless, so
+    the window cannot take keyboard focus. Not signed in on the headless side: say so and stop (no loop)."""
+    with file_lock(settings.paths.lock):
+        stopped = stop(paths=settings.paths, procs=list_processes(), kill_fn=kill_pid)
+    if stopped.get("action") != "stopped":
+        return shown  # not the Chrome we started; leave things as they are
+    ready = _ensure(settings, mode="start", headless=True)
+    if ready["state"] != "ok":
+        return _lifecycle(ready, action="relaunched_headless")
+    try:
+        status = _page_status(settings, ready["port"])
+    except BrowserDown as exc:
+        failed = dict(ready)
+        failed["state"] = "browser_down"
+        failed["error"] = exc.error
+        failed["hint"] = exc.hint or ready.get("hint")
+        return _lifecycle(failed, action="relaunched_headless")
+    signed_in = status["state"] == "ok"
+    payload = _lifecycle(
+        ready,
+        logged_in=True if signed_in else (False if status["state"] == "session_expired" else None),
+        hint=status.get("hint"),
+        action="relaunched_headless",
+    )
+    payload["state"] = status["state"]
+    payload["error"] = status.get("error")
+    return payload
+
+
 def _run_lifecycle(settings: Settings, args: argparse.Namespace) -> dict:
     if args.command == "stop":
         with file_lock(settings.paths.lock):
@@ -493,18 +632,34 @@ def _run_lifecycle(settings: Settings, args: argparse.Namespace) -> dict:
         else:
             headless = settings.headless
         ready = _ensure(settings, mode="start", headless=headless)
+        if ready["state"] == "ok" and ready.get("action") == "started":
+            try:
+                _page_status(settings, ready["port"])  # a just-started Chrome: let the page load first
+            except BrowserDown:
+                pass
         return _lifecycle(ready)
     if args.command == "login":
         def finish(page, ready):
-            status = assess(page.snapshot())
+            # A window that opened a moment ago may not have rendered yet (a signed-in profile looks blank).
+            status = wait_rendered(page, READY_SECONDS)[1]
             logged_in = status["state"] == "ok"
+            if not logged_in:
+                _set_marker(settings, ready, True)
             hint = None if logged_in else "在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。"
             payload = _lifecycle(ready, logged_in=logged_in, hint=hint, action="connected" if logged_in else "login_ready")
             payload["state"] = "ok"
             payload["error"] = None
             return payload
 
-        return _with_page(settings, mode="login", headless=False, kind="lifecycle", text="", fn=finish)
+        payload = _with_page(settings, mode="login", headless=False, kind="lifecycle", text="", fn=finish)
+        if (
+            payload.get("logged_in")
+            and payload.get("tracked")
+            and payload.get("headless") is False
+            and not settings.keep_window
+        ):
+            return _go_headless(settings, payload)
+        return payload
     if args.command == "selftest":
         def finish(page, ready):
             return BrowserBackend(page, headless=ready.get("headless")).selftest()
@@ -518,7 +673,7 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
     configure_stdio()
     raw = list(sys.argv[1:] if argv is None else argv)
     try:
-        cleaned, as_json, port, backend, autostart, chrome = _split_globals(raw)
+        cleaned, as_json, port, backend, autostart, chrome, keep_window = _split_globals(raw)
     except ConfigError as exc:
         print(safe_text(str(exc)), file=sys.stderr)
         return 2
@@ -538,6 +693,7 @@ def main(argv: list[str] | None = None, *, home: Path | None = None) -> int:
             backend=backend,
             autostart=autostart,
             chrome=chrome,
+            keep_window=keep_window,
             environ=os.environ,
         )
     except ConfigError as exc:

@@ -40,7 +40,13 @@ _CLICK_WATCH = """
 
 @pytest.fixture(scope="module")
 def browser():
-    with sync_playwright() as playwright:
+    # The driver itself may fail to start (a slim image without the libraries its bundled node needs),
+    # before any browser is launched; that is "cannot run here", not a test failure.
+    try:
+        playwright = sync_playwright().start()
+    except Exception as exc:
+        pytest.skip(f"playwright 已安裝，但它的 driver 起不來：{exc}")
+    try:
         try:
             launched = playwright.chromium.launch(headless=True)
         except Exception as exc:
@@ -49,6 +55,8 @@ def browser():
             yield launched
         finally:
             launched.close()
+    finally:
+        playwright.stop()
 
 
 def _open(browser, name: str):

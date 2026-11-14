@@ -105,6 +105,20 @@ def settled_snapshot(driver, *, sleep=None, clock=None) -> tuple[Snapshot, dict]
     return snap, status
 
 
+def wait_rendered(driver, seconds: float, *, sleep=None, clock=None) -> tuple[Snapshot, dict]:
+    """Poll until the page is more than a half-loaded shell (anything but `ui_changed`), or `seconds` pass."""
+    sleep = sleep or time.sleep
+    clock = clock or time.monotonic
+    snap = ready_snapshot(driver)
+    status = assess(snap)
+    deadline = clock() + seconds
+    while status["state"] == "ui_changed" and clock() < deadline:
+        sleep(SETTLE_STEP)
+        snap = driver.snapshot()
+        status = assess(snap)
+    return snap, status
+
+
 def collect_status(driver) -> dict:
     snap, status = settled_snapshot(driver)
     if status["state"] != "ok":
@@ -368,7 +382,10 @@ def collect_memory(driver) -> dict:
     return memory_payload(text, backend="browser")
 
 
-def collect_selftest(driver) -> dict:
+SELFTEST_RETRY_SECONDS = 3.0
+
+
+def _selftest_once(driver) -> dict:
     snap = ready_snapshot(driver)
     status = assess(snap)
     present = dict(snap.selectors)
@@ -385,6 +402,15 @@ def collect_selftest(driver) -> dict:
     payload = dict(status)
     payload["present"] = present
     payload["missing"] = []
+    return payload
+
+
+def collect_selftest(driver, *, sleep=None) -> dict:
+    payload = _selftest_once(driver)
+    if payload["state"] == "ui_changed":
+        # Right after `start` the page may still be loading (log/avatar missing). Look once more.
+        (sleep or time.sleep)(SELFTEST_RETRY_SECONDS)
+        payload = _selftest_once(driver)
     return payload
 
 

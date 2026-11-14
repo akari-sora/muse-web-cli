@@ -79,6 +79,7 @@ class Settings:
     backend: str
     chrome: str | None
     paths: Paths
+    keep_window: bool = False
 
     @property
     def profile(self) -> Path:
@@ -114,6 +115,7 @@ def resolve_settings(
     autostart: bool | None = None,
     headless: object = None,
     chrome: object = None,
+    keep_window: bool | None = None,
     environ: dict | None = None,
 ) -> Settings:
     """CLI flag, then environment, then config file, then default."""
@@ -133,6 +135,10 @@ def resolve_settings(
         headless_value: object = env.get("MUSE_WEB_HEADLESS", file.get("headless"))
     else:
         headless_value = headless
+    if keep_window is None:
+        keep_value: object = env.get("MUSE_WEB_KEEP_WINDOW", file.get("keep_window"))
+    else:
+        keep_value = keep_window
     if chrome is None:
         chrome = env.get("MUSE_WEB_CHROME") or file.get("chrome") or None
     if isinstance(chrome, str) and not chrome.strip():
@@ -144,4 +150,5 @@ def resolve_settings(
         backend=_backend(backend_value),
         chrome=str(chrome) if chrome else None,
         paths=found,
+        keep_window=parse_bool(keep_value, False),
     )

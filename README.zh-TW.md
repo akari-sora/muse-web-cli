@@ -22,20 +22,20 @@
 
 ## 安裝
 
-v0.1.8。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.8`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.9。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.9`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 muse-web-cli --version
 ```
 
@@ -50,7 +50,7 @@ muse-web-cli status
 muse-web-cli start --headless
 ```
 
-`login` 開有視窗的 Chrome，工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。`selftest` 只檢查選擇器，`status` 看工作階段。之後可以無頭使用。設定檔、除錯埠、設定檔案與環境變數見[第一次設定](docs/reference.zh-TW.md#第一次設定)。
+`login` 開有視窗的 Chrome，工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。`selftest` 只檢查選擇器，`status` 看工作階段。登入成功後，`login` 會關掉它開的視窗，用同一個設定檔改以無頭重開，視窗就不會搶你的鍵盤焦點（`--keep-window` 保留視窗）。設定檔、除錯埠、設定檔案與環境變數見[第一次設定](docs/reference.zh-TW.md#第一次設定)。
 
 ## 快速開始
 
