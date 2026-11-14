@@ -17,7 +17,7 @@ The [README](../README.md) covers install, quick start, and the command list. Th
 
 The profile is always `~/.trinity-cli/muse-profile` (`Path.home()` on every OS). One Chrome per profile. The debug port defaults to `127.0.0.1:9333`.
 
-1. Log in headed. The tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. Without a display, login leaves a running headless Chrome in place. Do not copy cookies.
+1. Log in headed. The tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. Without a display, login leaves a running headless Chrome in place. Do not copy cookies. Once `login` sees you are signed in, it closes the visible Chrome it started and relaunches the same profile headless (a visible window takes keyboard focus whenever it is driven). Pass `--keep-window` to keep the window; any later command that attaches to a visible tracked Chrome prints a warning (`warning` in `--json`) with the switch command.
 
 ```bash
 muse-web-cli login
@@ -46,7 +46,7 @@ Config file `~/.trinity-cli/muse-web-cli.json` (defaults apply if it is missing)
 {"port": 9333, "headless": true, "autostart": false, "backend": "browser", "chrome": ""}
 ```
 
-Environment: `MUSE_WEB_CDP_PORT`, `MUSE_WEB_HEADLESS`, `MUSE_WEB_AUTOSTART`, `MUSE_WEB_BACKEND`, `MUSE_WEB_CHROME`. Precedence is flag, then environment, then config, then default.
+Environment: `MUSE_WEB_CDP_PORT`, `MUSE_WEB_HEADLESS`, `MUSE_WEB_AUTOSTART`, `MUSE_WEB_BACKEND`, `MUSE_WEB_CHROME`, `MUSE_WEB_KEEP_WINDOW`. Precedence is flag, then environment, then config, then default.
 
 ## Output examples
 
@@ -104,6 +104,7 @@ Global flags may appear before or after the command:
 | `--port` | 9333 | 1–65535 |
 | `--backend` | `browser` | `browser` or `api` |
 | `--autostart` | off | start headless Chrome when nothing is listening |
+| `--keep-window` | off | `login` and `credential` keep the visible window open instead of relaunching headless (also `MUSE_WEB_KEEP_WINDOW`, config `keep_window`) |
 | `--chrome PATH` | discovered per OS | overrides `MUSE_WEB_CHROME` |
 | `--version` |  | print the version |
 
@@ -118,7 +119,7 @@ Global flags may appear before or after the command:
 - `chats` — list the main chat and any side chats already showing in the sidebar. A closed sidebar is not clicked; `state` is `ui_changed` and the hint is「請在 Muse 打開側欄後重試」. It does not click "新副聊天室" / new side chat, and it does not open a chat. On the new shell the main `title` may be null. `muse-web-cli chats`
 - `chats --create [--title T]`, `--rename ID --title T`, `--delete ID`, `--switch ID|main` — `--backend api` only. `ID` is the `session_id` that `chats` lists; all four use the same ids. `--create` makes the new chat the switched one; `--json` has its id in `created`. `--delete` refuses the main chat; `--rename` and `--delete` refuse an id that was not listed and send nothing. `muse-web-cli --backend api chats --switch main`
 - `credential` — get the gateway token from the logged-in page and write it only into `~/.trinity-cli/muse-credential` (mode 600). It never prints it. Runs `login` first when the session is missing. `muse-web-cli credential`
-- `login` — open a headed window so you can log in. `muse-web-cli login`
+- `login` — open a headed window so you can log in. Once signed in it closes that window and relaunches the profile headless (`headless: true`, `action: relaunched_headless`); if the headless page is signed out, `state` is `session_expired`. `--keep-window` skips the relaunch. `muse-web-cli login`
 - `start` — start the dedicated Chrome, or attach if it is already running. `--headless` is the default (`--headless=new`). `--headed` shows the window. The two flags cannot be combined. `muse-web-cli start --headless`
 - `stop` — stop only the process this tool started. `muse-web-cli stop`
 - `selftest` — check that selectors exist. It clicks nothing. The switcher trigger is required. `upcoming_tab` is reported in `present` but not required. `muse-web-cli selftest`

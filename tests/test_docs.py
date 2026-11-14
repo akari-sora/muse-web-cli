@@ -71,7 +71,8 @@ def test_version_changelog_and_install_pins_agree(docs):
     readme, reference = docs
     version = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     assert __version__ == version
-    newest = re.search(r"^## \[([^\]]+)\]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
+    # An [Unreleased] section may sit above the released versions; the release process renames it.
+    newest = re.search(r"^## \[(?!Unreleased\])([^\]]+)\]", (ROOT / "CHANGELOG.md").read_text(encoding="utf-8"), re.M)
     assert newest and newest.group(1) == version
     assert set(re.findall(r"muse-web-cli\.git@v([^\"\s]+)", readme)) == {version}
     assert set(re.findall(r"muse-web-cli\.git@v([^\"\s]+)", reference)) <= {version}

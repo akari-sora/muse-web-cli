@@ -50,7 +50,7 @@ muse-web-cli status
 muse-web-cli start --headless
 ```
 
-`login` opens a headed window; the tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. `selftest` only checks selectors; `status` checks the session. After that, use can be headless. Profile, port, config file, and environment variables: [First-time setup](docs/reference.md#first-time-setup).
+`login` opens a headed window; the tool never types credentials. On a Linux server with no display, log in on a desktop session or run `xvfb-run muse-web-cli login`. `selftest` only checks selectors; `status` checks the session. After you are signed in, `login` closes its window and reopens the same profile headless, so the window cannot take your keyboard focus (`--keep-window` keeps it open). Profile, port, config file, and environment variables: [First-time setup](docs/reference.md#first-time-setup).
 
 ## Quick start
 

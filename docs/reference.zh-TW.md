@@ -17,7 +17,7 @@
 
 設定檔固定是 `~/.trinity-cli/muse-profile`（Windows 也是你的使用者主目錄底下的 `.trinity-cli`）。同一個設定檔同時只能有一個 Chrome。除錯埠預設 `127.0.0.1:9333`。
 
-1. 有視窗登入。工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。沒有顯示器時不會關掉已經在跑的 headless Chrome。不要複製 cookie。
+1. 有視窗登入。工具不會輸入帳號密碼。Linux 沒有顯示器時，在桌面工作階段登入，或用 `xvfb-run muse-web-cli login`。沒有顯示器時不會關掉已經在跑的 headless Chrome。不要複製 cookie。`login` 確認已登入後，會關掉它自己開的有視窗 Chrome，用同一個設定檔改以無頭重開（有視窗的 Chrome 每次被驅動都會搶鍵盤焦點）。要保留視窗請加 `--keep-window`；之後的指令若接上有視窗、由本工具啟動的 Chrome，會印出警告（`--json` 有 `warning` 欄位）和切換指令。
 
 ```bash
 muse-web-cli login
@@ -46,7 +46,7 @@ muse-web-cli stop
 {"port": 9333, "headless": true, "autostart": false, "backend": "browser", "chrome": ""}
 ```
 
-環境變數：`MUSE_WEB_CDP_PORT`、`MUSE_WEB_HEADLESS`、`MUSE_WEB_AUTOSTART`、`MUSE_WEB_BACKEND`、`MUSE_WEB_CHROME`。優先順序是指令列、環境變數、設定檔、預設。
+環境變數：`MUSE_WEB_CDP_PORT`、`MUSE_WEB_HEADLESS`、`MUSE_WEB_AUTOSTART`、`MUSE_WEB_BACKEND`、`MUSE_WEB_CHROME`、`MUSE_WEB_KEEP_WINDOW`。優先順序是指令列、環境變數、設定檔、預設。
 
 ## 輸出範例
 
@@ -104,6 +104,7 @@ muse-web-cli --json pending
 | `--port` | 9333 | 1–65535 |
 | `--backend` | `browser` | `browser` 或 `api` |
 | `--autostart` | 關 | 埠沒人聽時啟動無頭 Chrome |
+| `--keep-window` | 關 | `login` 與 `credential` 保留有視窗的 Chrome，不改以無頭重開（也可用 `MUSE_WEB_KEEP_WINDOW`、設定檔 `keep_window`） |
 | `--chrome PATH` | 依作業系統尋找 | 覆寫 `MUSE_WEB_CHROME` |
 | `--version` |  | 印出版本 |
 
@@ -118,7 +119,7 @@ muse-web-cli --json pending
 - `chats` — 列出已經打開的側欄裡的主聊天室與副聊天室。側欄關著時不點開關，`state` 是 `ui_changed`，hint 是「請在 Muse 打開側欄後重試」。不點「新副聊天室」，也不會打開任何一則。新版介面的主標題可能是 null。`muse-web-cli chats`
 - `chats --create [--title T]`、`--rename ID --title T`、`--delete ID`、`--switch ID|main` — 只在 `--backend api`。`ID` 是 `chats` 列出的 `session_id`，四個動作用同一套 id。`--create` 會把新聊天室設成目前這一則，`--json` 的 `created` 是它的 id。`--delete` 不接受主聊天室；`--rename`、`--delete` 碰到沒列出的 id 會拒絕，不送出。`muse-web-cli --backend api chats --switch main`
 - `credential` — 從已登入的頁面取得 gateway token，只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。沒登入會先走 `login`。`muse-web-cli credential`
-- `login` — 開有視窗的 Chrome，等你登入。`muse-web-cli login`
+- `login` — 登入成功後會關掉那個視窗，並以無頭重開同一個設定檔（`headless: true`、`action: relaunched_headless`）；無頭頁面若是登出狀態，`state` 為 `session_expired`。`--keep-window` 略過重開。開有視窗的 Chrome，等你登入。`muse-web-cli login`
 - `start` — 啟動專用 Chrome，或接上已經在跑的那一個。`--headless` 是預設（`--headless=new`）。`--headed` 顯示視窗。兩個旗標不能一起用。`muse-web-cli start --headless`
 - `stop` — 只停止這個工具自己啟動的進程。`muse-web-cli stop`
 - `selftest` — 檢查選擇器在不在，不點任何東西。切換鈕必須在。`upcoming_tab` 會列在 `present`，但不是必要的。`muse-web-cli selftest`
