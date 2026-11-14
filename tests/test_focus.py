@@ -3,6 +3,7 @@ from contextlib import contextmanager
 import pytest
 
 from muse_web_cli import cli
+from muse_web_cli.chrome import clear_state, read_state, write_state
 from muse_web_cli.config import paths_for, resolve_settings
 from muse_web_cli.flow import collect_selftest, wait_rendered
 from tests.fakes import ok_snapshot
@@ -49,10 +50,14 @@ class Env:
 
         def ensure(settings, *, mode, headless):
             self.calls.append(("ensure", mode, headless))
+            headless = headless and mode == "start"  # `use` attaches to whatever is running: the headed window
+            if headless:
+                write_state(settings.paths.state, {"pid": 6, "port": 9333, "headless": True})
             return dict(HEADLESS) if headless else dict(HEADED)
 
         def stop(**kwargs):
             self.calls.append(("stop",))
+            clear_state(self.settings.paths.state)
             return {"state": "ok", "action": "stopped", "tracked": False, "pid": 5}
 
         def connect(port):
@@ -190,3 +195,76 @@ def test_wait_rendered_stops_as_soon_as_the_page_renders():
     snap, status = wait_rendered(page, 15.0, sleep=sleep, clock=lambda: now[0])
     assert status["state"] == "ok"
     assert now[0] == 1.0
+
+
+def status_of(env, **kw):
+    return cli._with_page(env.settings, mode="use", headless=True, kind="status", text="", fn=lambda page, ready: {"state": "ok", "headless": ready["headless"]}, **kw)
+
+
+def mark(env, opened_for="login"):
+    write_state(env.settings.paths.state, {"pid": 5, "port": 9333, "headless": False, "opened_for": opened_for})
+
+
+def test_login_waits_for_the_page_before_deciding(monkeypatch, tmp_path):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(ok_snapshot()))
+    env.headed_page = Page(loading(), ok_snapshot())
+    monkeypatch.setattr(cli, "READY_SECONDS", 5.0)
+    monkeypatch.setattr("muse_web_cli.flow.time.sleep", lambda s: None)
+    out = login(env.settings)
+    assert out["logged_in"] is True
+    assert out["headless"] is True
+
+
+def test_signed_out_login_marks_the_window(monkeypatch, tmp_path):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(ok_snapshot()))
+    env.headed_page = Page(signed_out())
+    write_state(env.settings.paths.state, {"pid": 5, "port": 9333, "headless": False})
+    out = login(env.settings)
+    assert out["action"] == "login_ready"
+    assert out["headless"] is False
+    assert ("stop",) not in env.calls
+    assert read_state(env.settings.paths.state)["opened_for"] == "login"
+
+
+def test_next_command_switches_a_marked_window_once_signed_in(monkeypatch, tmp_path, capsys):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(ok_snapshot()))
+    mark(env)
+    out = status_of(env)
+    assert env.calls == [("ensure", "use", True), ("stop",), ("ensure", "start", True)]
+    assert out["headless"] is True
+    assert "relaunched headless" in out["warning"]
+    assert capsys.readouterr().err.count("warning:") == 1
+    assert "opened_for" not in read_state(env.settings.paths.state)
+
+
+def test_marked_window_still_signed_out_is_left_alone(monkeypatch, tmp_path):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(ok_snapshot()))
+    env.headed_page = Page(signed_out())
+    mark(env)
+    out = status_of(env)
+    assert ("stop",) not in env.calls
+    assert out["headless"] is False
+    assert "keyboard focus" in out["warning"]
+    assert read_state(env.settings.paths.state)["opened_for"] == "login"
+
+
+@pytest.mark.parametrize("opened_for, keep", [(None, False), ("login", True)])
+def test_unmarked_or_kept_window_is_only_warned_about(monkeypatch, tmp_path, opened_for, keep):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(ok_snapshot()))
+    env.settings.keep_window = keep
+    write_state(env.settings.paths.state, {"pid": 5, "port": 9333, "headless": False, **({"opened_for": opened_for} if opened_for else {})})
+    out = status_of(env)
+    assert ("stop",) not in env.calls
+    assert out["headless"] is False
+    assert (not keep) == ("warning" in out)
+
+
+def test_failed_headless_relaunch_is_reported_once_and_does_not_loop(monkeypatch, tmp_path):
+    env = Env(monkeypatch, tmp_path, headless_page=Page(signed_out()))
+    mark(env)
+    out = status_of(env)
+    assert out["state"] == "session_expired"
+    assert "opened_for" not in read_state(env.settings.paths.state)
+    monkeypatch.setattr(cli, "_ensure", lambda settings, **kw: dict(HEADLESS))
+    status_of(env)
+    assert env.calls.count(("stop",)) == 1

@@ -119,7 +119,7 @@ muse-web-cli --json pending
 - `chats` — 列出已經打開的側欄裡的主聊天室與副聊天室。側欄關著時不點開關，`state` 是 `ui_changed`，hint 是「請在 Muse 打開側欄後重試」。不點「新副聊天室」，也不會打開任何一則。新版介面的主標題可能是 null。`muse-web-cli chats`
 - `chats --create [--title T]`、`--rename ID --title T`、`--delete ID`、`--switch ID|main` — 只在 `--backend api`。`ID` 是 `chats` 列出的 `session_id`，四個動作用同一套 id。`--create` 會把新聊天室設成目前這一則，`--json` 的 `created` 是它的 id。`--delete` 不接受主聊天室；`--rename`、`--delete` 碰到沒列出的 id 會拒絕，不送出。`muse-web-cli --backend api chats --switch main`
 - `credential` — 從已登入的頁面取得 gateway token，只寫進 `~/.trinity-cli/muse-credential`（mode 600），不印出。沒登入會先走 `login`。`muse-web-cli credential`
-- `login` — 登入成功後會關掉那個視窗，並以無頭重開同一個設定檔（`headless: true`、`action: relaunched_headless`）；無頭頁面若是登出狀態，`state` 為 `session_expired`。`--keep-window` 略過重開。開有視窗的 Chrome，等你登入。`muse-web-cli login`
+- `login` — 登入成功後會關掉那個視窗，並以無頭重開同一個設定檔（`headless: true`、`action: relaunched_headless`）；無頭頁面若是登出狀態，`state` 為 `session_expired`。`--keep-window` 略過重開。若 login 停在登入頁，該視窗會被標記，下一個指令發現你已登入時會先重開成無頭。開有視窗的 Chrome，等你登入。`muse-web-cli login`
 - `start` — 啟動專用 Chrome，或接上已經在跑的那一個。`--headless` 是預設（`--headless=new`）。`--headed` 顯示視窗。兩個旗標不能一起用。`muse-web-cli start --headless`
 - `stop` — 只停止這個工具自己啟動的進程。`muse-web-cli stop`
 - `selftest` — 檢查選擇器在不在，不點任何東西。切換鈕必須在。`upcoming_tab` 會列在 `present`，但不是必要的。`muse-web-cli selftest`

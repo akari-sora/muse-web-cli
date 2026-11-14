@@ -28,9 +28,11 @@ from muse_web_cli.chrome import (
     kill_pid,
     list_processes,
     port_open,
+    read_state,
     spawn,
     stop,
     wait_until_port,
+    write_state,
 )
 from muse_web_cli.config import ConfigError, Settings, resolve_settings
 from muse_web_cli.driver import connect
@@ -325,11 +327,61 @@ def _page_status(settings: Settings, port: int) -> dict:
                 pass
 
 
+def _marked_for_login(settings: Settings, ready: dict) -> bool:
+    """True for the tracked headed Chrome that `login` opened and left for the person to sign in."""
+    if not ready.get("tracked") or ready.get("headless") is not False:
+        return False
+    state = read_state(settings.paths.state)
+    return state.get("opened_for") == "login" and state.get("pid") == ready.get("pid")
+
+
+def _set_marker(settings: Settings, ready: dict, marked: bool) -> None:
+    state = read_state(settings.paths.state)
+    if not state or state.get("pid") != ready.get("pid"):
+        return
+    if marked:
+        state["opened_for"] = "login"
+    else:
+        state.pop("opened_for", None)
+    write_state(settings.paths.state, state)
+
+
+def _switch_marked_window(settings: Settings, ready: dict) -> tuple[dict, str | None]:
+    """The window `login` left open for signing in: once the person is signed in, the next command
+    relaunches it headless first. Returns (ready for the command, note). A failed relaunch is reported
+    once (the new headless Chrome carries no marker, so nothing repeats)."""
+    if getattr(settings, "keep_window", False) or not _marked_for_login(settings, ready):
+        return ready, None
+    try:
+        status = _page_status(settings, ready["port"])
+    except BrowserDown:
+        return ready, None
+    if status["state"] != "ok":
+        return ready, None  # still on the sign-in page; keep the marker
+    moved = _go_headless(settings, {})
+    if "headless" not in moved:
+        _set_marker(settings, ready, False)  # could not close it; stop trying
+        return ready, None
+    if moved["state"] == "ok":
+        note = "the Muse window that login opened was closed and Chrome was relaunched headless, so it cannot take keyboard focus"
+        print(f"warning: {note}", file=sys.stderr)
+        return {"state": "ok", "port": moved["port"], "headless": True, "tracked": True, "action": moved["action"]}, note
+    failed = {"state": moved["state"], "port": moved["port"], "headless": True, "tracked": True}
+    failed["error"] = f"after the switch to headless: {moved['error'] or moved['state']}"
+    failed["hint"] = moved["hint"]
+    return failed, None
+
+
 def _with_page(settings: Settings, *, mode: str, headless: bool, kind: str, text: str, fn):
     ready = _ensure(settings, mode=mode, headless=headless)
     if ready["state"] != "ok":
         return _not_ready(ready, kind, text)
-    warning = _focus_warning(settings, ready) if mode == "use" else None
+    note = None
+    if mode == "use":
+        ready, note = _switch_marked_window(settings, ready)
+        if ready["state"] != "ok":
+            return _not_ready(ready, kind, text)
+    warning = (note or _focus_warning(settings, ready)) if mode == "use" else None
     with file_lock(settings.paths.page_lock):
         try:
             page = connect(ready["port"])
@@ -493,7 +545,11 @@ def _connect_page(settings: Settings):
     ready = _ensure(settings, mode="use", headless=True)
     if ready["state"] != "ok":
         return ready, None
-    _focus_warning(settings, ready)
+    ready, note = _switch_marked_window(settings, ready)
+    if ready["state"] != "ok":
+        return ready, None
+    if not note:
+        _focus_warning(settings, ready)
     try:
         return ready, connect(ready["port"])
     except BrowserDown as exc:
@@ -584,8 +640,11 @@ def _run_lifecycle(settings: Settings, args: argparse.Namespace) -> dict:
         return _lifecycle(ready)
     if args.command == "login":
         def finish(page, ready):
-            status = assess(page.snapshot())
+            # A window that opened a moment ago may not have rendered yet (a signed-in profile looks blank).
+            status = wait_rendered(page, READY_SECONDS)[1]
             logged_in = status["state"] == "ok"
+            if not logged_in:
+                _set_marker(settings, ready, True)
             hint = None if logged_in else "在開啟的 Chrome 視窗登入 Muse。這個工具不會輸入帳號密碼。"
             payload = _lifecycle(ready, logged_in=logged_in, hint=hint, action="connected" if logged_in else "login_ready")
             payload["state"] = "ok"
