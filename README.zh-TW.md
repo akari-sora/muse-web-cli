@@ -22,20 +22,20 @@
 
 ## 安裝
 
-v0.1.8。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.8`。找不到指令時，把 `~/.local/bin` 加進 PATH。
+v0.1.9。裝好後執行 `muse-web-cli --version`，應印出 `muse-web-cli 0.1.9`。找不到指令時，把 `~/.local/bin` 加進 PATH。
 
 macOS 與 Linux：
 
 ```bash
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
-PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 pipx install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 ```
 
 Windows（PowerShell）：
 
 ```powershell
 $env:PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD = "1"
-uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.8"
+uv tool install "git+https://gitlab.com/aa22396584/muse-web-cli.git@v0.1.9"
 muse-web-cli --version
 ```
 
